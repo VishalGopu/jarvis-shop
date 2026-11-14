@@ -43,6 +43,7 @@ const $ = (id) => document.getElementById(id);
 const ls = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 let who = ls.get("kwho"), orders = [], chefs = [], mode = "station", menu = [], fulfil = "kitchen", W = {}, payAfter = false;
 const staff = () => W.staff || "Chef", pack = () => fulfil === "pack";
+const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 const fmt = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
 const note = (t) => ($("note").textContent = t);
 const chefName = (id) => chefs.find((c) => c.id === id)?.name;
@@ -110,7 +111,7 @@ function renderBoard() {
   $("chips").innerHTML = menu.map((i) => `<span class="chip ${i.soldOut ? "offc" : ""}" data-so="${i.id}" data-v="${i.soldOut ? 0 : 1}">${i.name}${i.soldOut ? " · out" : ""}</span>`).join("");
   $("title").textContent = "📋 " + (W.station || "Kitchen") + " board";
   const first = orders.find((o) => o.status === "cooking");
-  $("list").innerHTML = orders.map((o) => `<div class="o ${o.status} ${o === first ? "first" : ""}"><span class="t ${o.status === "cooking" && Date.now() - (o.startedAt || o.paidAt) > 600000 ? "late" : ""}" data-since="${o.startedAt || o.paidAt}">${fmt(Date.now() - (o.startedAt || o.paidAt))}</span><b>#${o.number}</b>${o.table ? ` <span class="tag">table ${o.table}</span>` : ""}
+  $("list").innerHTML = orders.map((o) => `<div class="o ${o.status} ${o === first ? "first" : ""}">${o.source === "phone" && o.pickupAt ? `<span class="t ${o.status === "cooking" && Date.now() > o.pickupAt ? "late" : ""}">due ${clock(o.pickupAt)}</span>` : `<span class="t ${o.status === "cooking" && Date.now() - (o.startedAt || o.paidAt) > 600000 ? "late" : ""}" data-since="${o.startedAt || o.paidAt}">${fmt(Date.now() - (o.startedAt || o.paidAt))}</span>`}<b>#${o.number}</b>${o.source === "phone" ? ` <span class="tag">📞 phone · pay at pickup</span>` : ""}${o.table ? ` <span class="tag">table ${o.table}</span>` : ""}
     ${o.lines.map((l) => { const done = (l.done || 0) >= l.qty; return `<div class="ln ${done ? "done" : ""}"><span>${fmtQty(l.done || 0, l.unit)}/${fmtQty(l.qty, l.unit)} × ${l.name}${l.note ? ` <b title="note">📝${l.note}</b>` : ""}${l.chefId ? `<span class="tag">${chefName(l.chefId) || ""}</span>` : ""}</span>${o.status === "cooking" && !done ? `<button class="ghost" data-line="${o.number}|${l.id}">✓</button>` : ""}</div>`; }).join("")}
     <div class="mut">${o === first ? "← oldest" : o.status}</div>
     ${o.status === "cooking" ? `<p><button data-ready="${o.number}">Order ready</button></p>` : `<p>${payAfter && !o.paidAt ? `<span class="mut">₹${o.total} · pay at counter</span> <button class="ghost" data-cash="${o.id}">💵 Cash received</button>` : `<button class="ghost" data-deliver="${o.number}">Picked up ✔</button>`}</p>`}</div>`).join("") || `<p class="mut">No active orders.</p>`;

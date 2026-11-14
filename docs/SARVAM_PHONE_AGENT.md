@@ -42,3 +42,11 @@ Each response has `ok` and a plain-English `message` the agent can read out. `bo
 - **Deployments:** an active deployment cannot be edited. Pause it, patch `app_version`, resume. Commit the agent first; a deployment needs a committed version.
 - **Tool replies:** `/phone/check` says when part of the order was not on the menu; `/phone/book` says when the pickup time was in the past or more than 6 h away.
 - **Cost:** a 130 s call cost about Rs 14.70 (agent Rs 13.50, telephony Rs 1.20), more than the estimate above, so re-check Sarvam's current rates.
+
+## Tied to one shop, owner screen
+- `VOICE_SHOPS=<shop code>` limits phone orders (both `/phone/*` tools and `/voice`) to that shop; any other code answers "I could not find this shop".
+  The Sarvam tools carry the same code as a fixed value, so each extra shop needs its own tools (or an agent) until we generalise this.
+- `PHONE_AGENT_NUMBER=<number owners forward to>` makes the Owner screen show a "Phone orders" card with the number and the dial codes
+  (on `**61*N**15#`, busy `**67*N#`, off `##61#`). The card only appears for shops allowed by `VOICE_SHOPS`.
+- Phone orders show on the Kitchen screen with a 📞 tag and a "due <time>" label (instead of the overdue timer), and with 📞 on the Counter's collect-payment list.
+- Known gap: a phone order starts as `cooking` the moment it is booked, so kitchen tasks are dispatched immediately, not shortly before the pickup time.

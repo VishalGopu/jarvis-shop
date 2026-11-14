@@ -194,7 +194,7 @@ async function app(req, res, url, role) {
     }
 
     // owner: this shop's code (to pair more devices), plan limits and today's usage
-    if (url.pathname === "/api/shop-info") { const meta = isMulti() ? getShop(cur().id) : null; return json(res, 200, { name: menu.shop, code: meta?.code || null, multi: isMulti(), usage: usageView(cur()) }); }
+    if (url.pathname === "/api/shop-info") { const meta = isMulti() ? getShop(cur().id) : null; return json(res, 200, { name: menu.shop, code: meta?.code || null, multi: isMulti(), phone: phoneInfo(meta?.code), usage: usageView(cur()) }); }
     return json(res, 404, { error: "not found" });
   } catch (e) {
     if (e.invalidAudio) return json(res, 400, { error: e.message });
@@ -263,10 +263,14 @@ server.listen(process.env.PORT || 3000, "0.0.0.0", () => console.log(`Jarvis for
 // Phone orders: a telephony provider streams each call to /voice?shop=<code>&key=<VOICE_KEY> (see src/voice.js)
 // VOICE_PORT puts the call endpoint on its own port, so a public tunnel can expose just that and not the whole shop API
 const voiceServer = process.env.VOICE_PORT ? http.createServer((q, r) => (q.url.startsWith("/phone/") ? handlePhoneTool(q, r, voiceHooks) : (r.writeHead(404), r.end()))).listen(process.env.VOICE_PORT, "0.0.0.0") : server;
+// Phone orders are tied to the shop codes in VOICE_SHOPS (comma separated). Empty = any shop (single-shop installs).
+const phoneShopOk = (code) => { const list = (process.env.VOICE_SHOPS || "").split(",").map((s) => s.trim().toUpperCase()).filter(Boolean); return !list.length || list.includes(String(code || "").toUpperCase()); };
+const phoneInfo = (code) => { const n = String(process.env.PHONE_AGENT_NUMBER || "").replace(/\D/g, ""); if (!n || !process.env.VOICE_KEY || (isMulti() && !phoneShopOk(code))) return null;
+  return { number: n, on: `**61*${n}**15#`, busy: `**67*${n}#`, unreachable: `**62*${n}#`, off: "##61#" }; };
 const voiceHooks = {
   tenantFor: async (code) => {
     let t;
-    if (isMulti()) { const shop = shopByCode(code); if (!shop) return null; t = loadTenant(shop.id, { name: shop.name, profile: shop.profile, plan: shop.plan }); }
+    if (isMulti()) { if (!phoneShopOk(code)) return null; const shop = shopByCode(code); if (!shop) return null; t = loadTenant(shop.id, { name: shop.name, profile: shop.profile, plan: shop.plan }); }
     else t = loadTenant("default");
     if (!t.hooks.ready) wire(t);
     return t;
