@@ -1,0 +1,327 @@
+{
+ "id": "tiffin",
+ "label": "Tiffin point (pay at pickup)",
+ "kindLabel": "tiffin point",
+ "shop": "Annapurna Tiffins",
+ "fulfil": "kitchen",
+ "payWhen": "after",
+ "table": false,
+ "words": {
+  "staff": "Chef",
+  "staffPl": "Chefs",
+  "station": "Kitchen",
+  "working": "preparing",
+  "setup": "Kitchen setup"
+ },
+ "parserRole": "tiffin shop order",
+ "examples": [
+  "\"one masala dosa and two filter coffee\" -> {\"items\":{\"masala_dosa\":{\"q\":1,\"note\":\"\"},\"filter_coffee\":{\"q\":2,\"note\":\"\"}},\"remove\":{},\"checkout\":false,\"clear\":false}",
+  "\"दो इडली एक वड़ा, बस\" -> {\"items\":{\"idli\":{\"q\":2,\"note\":\"\"},\"medu_vada\":{\"q\":1,\"note\":\"\"}},\"remove\":{},\"checkout\":true,\"clear\":false}",
+  "\"ఒక పెసరట్టు, ఒక టీ, చట్నీ ఎక్కువ\" -> {\"items\":{\"pesarattu\":{\"q\":1,\"note\":\"extra chutney\"},\"chai\":{\"q\":1,\"note\":\"\"}},\"remove\":{},\"checkout\":false,\"clear\":false}",
+  "\"remove the vada\" -> {\"items\":{},\"remove\":{\"medu_vada\":1},\"checkout\":false,\"clear\":false}"
+ ],
+ "items": [
+  {
+   "id": "idli",
+   "name": "Idli",
+   "aliases": [
+    "idly",
+    "इडली",
+    "ఇడ్లీ"
+   ],
+   "price": 40,
+   "unit": "plate",
+   "step": 1,
+   "pop": 20
+  },
+  {
+   "id": "medu_vada",
+   "name": "Medu Vada",
+   "aliases": [
+    "vada",
+    "wada",
+    "vadai",
+    "वड़ा",
+    "वडा",
+    "వడ"
+   ],
+   "price": 45,
+   "unit": "plate",
+   "step": 1,
+   "pop": 14
+  },
+  {
+   "id": "idli_vada",
+   "name": "Idli Vada Combo",
+   "aliases": [
+    "idli vada",
+    "इडली वड़ा",
+    "ఇడ్లీ వడ"
+   ],
+   "price": 65,
+   "unit": "plate",
+   "step": 1,
+   "pop": 10
+  },
+  {
+   "id": "plain_dosa",
+   "name": "Plain Dosa",
+   "aliases": [
+    "sada dosa",
+    "dosa plain",
+    "सादा डोसा",
+    "ప్లెయిన్ దోశ",
+    "దోశ"
+   ],
+   "price": 45,
+   "unit": "plate",
+   "step": 1,
+   "pop": 14
+  },
+  {
+   "id": "masala_dosa",
+   "name": "Masala Dosa",
+   "aliases": [
+    "masala",
+    "dosa masala",
+    "मसाला डोसा",
+    "మసాలా దోశ"
+   ],
+   "price": 60,
+   "unit": "plate",
+   "step": 1,
+   "pop": 24
+  },
+  {
+   "id": "ghee_roast",
+   "name": "Ghee Roast Dosa",
+   "aliases": [
+    "ghee dosa",
+    "ghee roast",
+    "घी डोसा",
+    "నెయ్యి దోశ"
+   ],
+   "price": 75,
+   "unit": "plate",
+   "step": 1,
+   "pop": 10
+  },
+  {
+   "id": "rava_dosa",
+   "name": "Rava Dosa",
+   "aliases": [
+    "rava",
+    "sooji dosa",
+    "रवा डोसा",
+    "రవ్వ దోశ"
+   ],
+   "price": 65,
+   "unit": "plate",
+   "step": 1,
+   "pop": 8
+  },
+  {
+   "id": "set_dosa",
+   "name": "Set Dosa",
+   "aliases": [
+    "set dosai",
+    "सेट डोसा",
+    "సెట్ దోశ"
+   ],
+   "price": 55,
+   "unit": "plate",
+   "step": 1,
+   "pop": 7
+  },
+  {
+   "id": "pesarattu",
+   "name": "Pesarattu",
+   "aliases": [
+    "pesarattu upma",
+    "pesara",
+    "పెసరట్టు",
+    "पेसरट्टू"
+   ],
+   "price": 60,
+   "unit": "plate",
+   "step": 1,
+   "pop": 9
+  },
+  {
+   "id": "onion_uttapam",
+   "name": "Onion Uttapam",
+   "aliases": [
+    "uttapam",
+    "uthappam",
+    "onion uthappam",
+    "उत्तपम",
+    "ఊతప్పం"
+   ],
+   "price": 60,
+   "unit": "plate",
+   "step": 1,
+   "pop": 8
+  },
+  {
+   "id": "upma",
+   "name": "Upma",
+   "aliases": [
+    "rava upma",
+    "उपमा",
+    "ఉప్మా"
+   ],
+   "price": 35,
+   "unit": "plate",
+   "step": 1,
+   "pop": 10
+  },
+  {
+   "id": "pongal",
+   "name": "Ven Pongal",
+   "aliases": [
+    "pongal",
+    "ghee pongal",
+    "पोंगल",
+    "పొంగల్"
+   ],
+   "price": 50,
+   "unit": "plate",
+   "step": 1,
+   "pop": 10
+  },
+  {
+   "id": "poori",
+   "name": "Poori Bhaji",
+   "aliases": [
+    "poori",
+    "puri",
+    "puri bhaji",
+    "पूरी",
+    "पूरी भाजी",
+    "పూరి"
+   ],
+   "price": 55,
+   "unit": "plate",
+   "step": 1,
+   "pop": 12
+  },
+  {
+   "id": "mysore_bonda",
+   "name": "Mysore Bonda",
+   "aliases": [
+    "bonda",
+    "bajji",
+    "मैसूर बोंडा",
+    "బోండా"
+   ],
+   "price": 40,
+   "unit": "plate",
+   "step": 1,
+   "pop": 6
+  },
+  {
+   "id": "lemon_rice",
+   "name": "Lemon Rice",
+   "aliases": [
+    "nimmakaya pulihora",
+    "pulihora",
+    "नींबू चावल",
+    "నిమ్మకాయ పులిహోర"
+   ],
+   "price": 50,
+   "unit": "plate",
+   "step": 1,
+   "pop": 6
+  },
+  {
+   "id": "curd_rice",
+   "name": "Curd Rice",
+   "aliases": [
+    "thayir sadam",
+    "dahi chawal",
+    "दही चावल",
+    "పెరుగన్నం"
+   ],
+   "price": 45,
+   "unit": "plate",
+   "step": 1,
+   "pop": 6
+  },
+  {
+   "id": "veg_meals",
+   "name": "Mini Meals",
+   "aliases": [
+    "meals",
+    "lunch",
+    "thali",
+    "south indian meals",
+    "मील्स",
+    "భోజనం"
+   ],
+   "price": 90,
+   "unit": "plate",
+   "step": 1,
+   "pop": 9
+  },
+  {
+   "id": "filter_coffee",
+   "name": "Filter Coffee",
+   "aliases": [
+    "coffee",
+    "kaapi",
+    "filter kaapi",
+    "कॉफी",
+    "कॉफ़ी",
+    "కాఫీ"
+   ],
+   "price": 20,
+   "unit": "cup",
+   "step": 1,
+   "pop": 30
+  },
+  {
+   "id": "chai",
+   "name": "Chai",
+   "aliases": [
+    "tea",
+    "chaay",
+    "चाय",
+    "టీ",
+    "చాయ్"
+   ],
+   "price": 12,
+   "unit": "cup",
+   "step": 1,
+   "pop": 30
+  },
+  {
+   "id": "badam_milk",
+   "name": "Badam Milk",
+   "aliases": [
+    "badam",
+    "almond milk",
+    "बादाम दूध",
+    "బాదం పాలు"
+   ],
+   "price": 35,
+   "unit": "glass",
+   "step": 1,
+   "pop": 6
+  },
+  {
+   "id": "buttermilk",
+   "name": "Buttermilk",
+   "aliases": [
+    "majjiga",
+    "chaas",
+    "chhaas",
+    "छाछ",
+    "మజ్జిగ"
+   ],
+   "price": 20,
+   "unit": "glass",
+   "step": 1,
+   "pop": 10
+  }
+ ]
+}
