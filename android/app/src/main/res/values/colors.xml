@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="jarvis_bg">#F5F9FC</color>
-    <color name="jarvis_navy">#012B72</color>
-    <color name="jarvis_sky">#00BAF2</color>
+    <color name="chitragupta_bg">#F5F9FC</color>
+    <color name="chitragupta_navy">#012B72</color>
+    <color name="chitragupta_sky">#00BAF2</color>
 </resources>

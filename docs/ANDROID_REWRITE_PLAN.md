@@ -5,7 +5,7 @@ Status: steps 1-5 done in `android/` (native app built, installed and checked on
 ## Goal
 Replace the Capacitor/WebView app in `apk/` with a clean native Android app and a professional UI.
 Hackathon context: Paytm AI track, so the UI follows a **Paytm-inspired** look and principles
-(palette + clarity + trust cues). Do NOT use the Paytm logo or name as our branding; the product is "Jarvis for Shops".
+(palette + clarity + trust cues). Do NOT use the Paytm logo or name as our branding; the product is "Chitragupta for Shops".
 
 ## Scope decisions (made by the user)
 - Full rewrite, all three roles: Counter, Kitchen, Owner.

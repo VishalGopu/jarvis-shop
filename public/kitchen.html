@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Jarvis Kitchen</title>
+<title>Chitragupta Kitchen</title>
 <style>
 :root{--bg:#0b1220;--card:#141c2e;--fg:#e8eefc;--mut:#8b97b5;--acc:#2dd4bf;--warn:#fbbf24;--bad:#f87171}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:18px system-ui,sans-serif;padding:14px}
@@ -59,7 +59,7 @@ function render() {
   if (who && who !== "board" && !chefs.some((c) => c.id === who)) who = null;
   if (!who) {
     $("title").textContent = "👨‍🍳 Who is using this device?";
-    document.title = "Jarvis " + (W.station || "Kitchen");
+    document.title = "Chitragupta " + (W.station || "Kitchen");
     $("pick").innerHTML = chefs.map((c) => `<button data-who="${c.id}">👨‍🍳 ${c.name}<br><span class="mut">${c.skills.length && !pack() ? "does: " + c.skills.map((s) => menu.find((m) => m.id === s)?.name || s).join(", ") : pack() ? "packs orders" : "any dish"}${c.online ? " · on shift" : ""}</span></button>`).join("")
       + `<button data-who="board">📋 Board (manager view)<br><span class="mut">All orders, out-of-stock, assign by voice</span></button>` + (chefs.length ? "" : `<p class="mut">No ${staff().toLowerCase()}s set up yet. Use Owner → ${W.setup || "Kitchen setup"}, or open the Board.</p>`);
     $("pick").classList.remove("hide"); return;

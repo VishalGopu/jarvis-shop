@@ -172,7 +172,7 @@ async function app(req, res, url, role) {
         const s1 = Date.now();
         try {
           const { hourly, ...week } = f.week; const compact = { today: f.today, yesterday: f.yesterday, last7days: { ...week, busiestHourFrom24: f.week.peakHour }, tomorrowPrepSuggestion: f.tomorrow, slowestHour: f.waitPeak, soldOut: f.soldOut, ordersBeingCookedNow: f.cooking, stockLeft: f.stock };
-          answer = await ask(`You are Jarvis, the trusted business partner of the owner of "${f.shop}", a small ${f.kind || "shop"} in India. Answer the owner's question using ONLY the FACTS below (amounts are in rupees; hours use a 24-hour clock). Speak like a helpful friend: 1-3 short sentences, plain words, no markdown, no lists, no emojis. Never invent numbers. If the FACTS do not contain the answer, say you do not have that information yet. You may add one practical suggestion that follows from the FACTS. Reply in ${LANG_NAMES[lang]}.\nFACTS: ${JSON.stringify(compact)}`, q);
+          answer = await ask(`You are Chitragupta, the trusted business partner of the owner of "${f.shop}", a small ${f.kind || "shop"} in India. Answer the owner's question using ONLY the FACTS below (amounts are in rupees; hours use a 24-hour clock). Speak like a helpful friend: 1-3 short sentences, plain words, no markdown, no lists, no emojis. Never invent numbers. If the FACTS do not contain the answer, say you do not have that information yet. You may add one practical suggestion that follows from the FACTS. Reply in ${LANG_NAMES[lang]}.\nFACTS: ${JSON.stringify(compact)}`, q);
           if (answer) source = "llm";
         } catch (e) { console.warn("copilot LLM failed:", e.message); answer = null; }
         t.llm = Date.now() - s1;
@@ -296,7 +296,7 @@ async function gateway(req, res) {
   }
 }
 const server = http.createServer(gateway);
-server.listen(process.env.PORT || 3000, "0.0.0.0", () => console.log(`Jarvis for Shops on :${process.env.PORT || 3000}  mode=${isMulti() ? "multi-shop" : "single-shop"}  sarvam=${sarvamEnabled()}  parser=${process.env.PARSER || (process.env.LLAMA_URL ? "llama" : process.env.OLLAMA_URL ? "ollama" : "rules")}`));
+server.listen(process.env.PORT || 3000, "0.0.0.0", () => console.log(`Chitragupta for Shops on :${process.env.PORT || 3000}  mode=${isMulti() ? "multi-shop" : "single-shop"}  sarvam=${sarvamEnabled()}  parser=${process.env.PARSER || (process.env.LLAMA_URL ? "llama" : process.env.OLLAMA_URL ? "ollama" : "rules")}`));
 // Phone orders: a telephony provider streams each call to /voice?shop=<code>&key=<VOICE_KEY> (see src/voice.js)
 // VOICE_PORT puts the call endpoint on its own port, so a public tunnel can expose just that and not the whole shop API
 const voiceServer = process.env.VOICE_PORT ? http.createServer((q, r) => (q.url.startsWith("/phone/") ? handlePhoneTool(q, r, voiceHooks) : (r.writeHead(404), r.end()))).listen(process.env.VOICE_PORT, "0.0.0.0") : server;

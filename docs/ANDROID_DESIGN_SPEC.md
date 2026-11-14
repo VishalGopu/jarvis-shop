@@ -1,4 +1,4 @@
-# Jarvis for Shops: Android design spec (step 1)
+# Chitragupta for Shops: Android design spec (step 1)
 
 Status: DRAFT for user feedback. No project code yet. Palette values are approximate and must be checked visually on the phone.
 Principles come from the `mobile-app-ui-design` skill (8-pt grid, 60/30/10, thumb zone, 4 sizes / 2 weights, peak-end), implemented in Compose + Material 3.
@@ -50,7 +50,7 @@ Amounts always bigger than their labels ("Rs 240" is `display`, "Total" is `capt
 Legend: **[P]** = the one primary action, placed in the thumb zone.
 
 ### Onboarding (all roles)
-1. **Welcome**: logo mark (our own, a simple waveform-in-a-shop-bag glyph), "Jarvis for Shops", one line ("Speak the order. We do the rest."). **[P] Get started**. Small link "Scan shop QR".
+1. **Welcome**: logo mark (our own, a simple waveform-in-a-shop-bag glyph), "Chitragupta for Shops", one line ("Speak the order. We do the rest."). **[P] Get started**. Small link "Scan shop QR".
 2. **Connect to server**: URL field (prefilled with last used, accepts `host:port`, assumes `http://`), inline reachability check against `GET /api/mode` with a spinner then a green "Connected" chip (or a red message: "Can't reach the server. Is your phone on the same Wi-Fi?"). **[P] Continue**. Secondary: "Scan QR instead" (camera permission asked here, with a one-line reason).
 3. **Join or create** (multi mode only; single mode skips to Role): two big cards. "Join a shop" (code) and "Create a shop".
 4. **Join**: shop code field (6 chars, auto-uppercase, paste friendly) then **Role** cards (Counter / Kitchen / Owner, each with a one-line description and an icon). Owner reveals a PIN pad (4-6 digits, big keys, dots). Errors: wrong code, wrong PIN, 429 lockout with a countdown.
@@ -72,7 +72,7 @@ One task at a time. Top: staff name chip + online toggle. Centre: **task card** 
 
 ### Owner
 Bottom navigation, 4 tabs:
-- **Today**: summary cards (sales, orders, avg time) as `display` numbers, a simple sparkline, AI briefing card, "Ask Jarvis" copilot input (text + mic) with suggestion chips from `/api/insights`.
+- **Today**: summary cards (sales, orders, avg time) as `display` numbers, a simple sparkline, AI briefing card, "Ask Chitragupta" copilot input (text + mic) with suggestion chips from `/api/insights`.
 - **Menu**: catalog list with sold-out switches, add/edit item sheet.
 - **Team**: chefs/pickers list (online, assigned), staffing config.
 - **Shop**: name, type, **shop code card with Copy/Share (and QR later)**, usage, disconnect.
@@ -81,7 +81,7 @@ Bottom navigation, 4 tabs:
 Loading (skeleton shimmer, never a blank screen), empty (illustration glyph + guidance + CTA), error (inline banner with Retry), offline (persistent amber banner, actions disabled with explanation, SSE auto-reconnect), permission denied (mic: explains and opens settings).
 
 ## 3. Component list (`core:designsystem`)
-`JarvisTheme`, `JarvisButton` (Primary sky / Secondary outlined / Tertiary text / Success green), `MicButton` (idle, listening ring, processing), `AmountText`, `StatusChip` (paid / pending / cooking / ready / error), `JarvisCard`, `CartLineItem` + `QuantityStepper`, `TotalBar`, `UpiQrCard`, `PinPad` + `PinDots`, `CodeField` (shop code), `ServerUrlField` (with check state), `RoleCard`, `ShopTypeCard`, `StepIndicator`, `TaskCard`, `StatTile`, `SuggestionChip`, `BannerMessage` (info / warning / error), `EmptyState`, `SkeletonBlock`, `SuccessCheck` (animated), `ConnectionDot`, `JarvisTopBar`.
+`ChitraguptaTheme`, `ChitraguptaButton` (Primary sky / Secondary outlined / Tertiary text / Success green), `MicButton` (idle, listening ring, processing), `AmountText`, `StatusChip` (paid / pending / cooking / ready / error), `ChitraguptaCard`, `CartLineItem` + `QuantityStepper`, `TotalBar`, `UpiQrCard`, `PinPad` + `PinDots`, `CodeField` (shop code), `ServerUrlField` (with check state), `RoleCard`, `ShopTypeCard`, `StepIndicator`, `TaskCard`, `StatTile`, `SuggestionChip`, `BannerMessage` (info / warning / error), `EmptyState`, `SkeletonBlock`, `SuccessCheck` (animated), `ConnectionDot`, `ChitraguptaTopBar`.
 
 ## 4. Accessibility and adaptivity
 Dynamic type up to 200% without clipping, TalkBack labels on every icon button (mic announces state), status never conveyed by colour alone (icon + text), contrast >= 4.5:1 for text, edge-to-edge with correct insets, predictive back, dark theme. Phones first; layouts use window size classes so Counter becomes two-pane (cart | payment) on tablets later.
@@ -89,7 +89,7 @@ Dynamic type up to 200% without clipping, TalkBack labels on every icon button (
 ## 5. Compose theme prototype (to go into `core:designsystem`)
 
 ```kotlin
-package com.jarvisshop.core.designsystem.theme
+package com.chitraguptashop.core.designsystem.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
@@ -99,7 +99,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.unit.*
 
-object JarvisColors {
+object ChitraguptaColors {
     val Sky = Color(0xFF00BAF2)
     val Navy = Color(0xFF012B72)
     val Success = Color(0xFF21C17C);  val SuccessContainer = Color(0xFFE3F8EE)
@@ -114,22 +114,22 @@ data class StatusColors(
     val warning: Color, val warningContainer: Color,
 )
 val LocalStatusColors = staticCompositionLocalOf {
-    StatusColors(JarvisColors.Success, Color(0xFF0B6B45), JarvisColors.SuccessContainer,
-        JarvisColors.Warning, JarvisColors.WarningContainer)
+    StatusColors(ChitraguptaColors.Success, Color(0xFF0B6B45), ChitraguptaColors.SuccessContainer,
+        ChitraguptaColors.Warning, ChitraguptaColors.WarningContainer)
 }
 
 private val Light = lightColorScheme(
-    primary = JarvisColors.Sky, onPrimary = JarvisColors.Navy,
-    secondary = JarvisColors.Navy, onSecondary = Color.White,
+    primary = ChitraguptaColors.Sky, onPrimary = ChitraguptaColors.Navy,
+    secondary = ChitraguptaColors.Navy, onSecondary = Color.White,
     background = Color(0xFFF5F9FC), onBackground = Color(0xFF0B1B33),
     surface = Color.White, onSurface = Color(0xFF0B1B33),
     surfaceVariant = Color(0xFFE8F1F8), onSurfaceVariant = Color(0xFF5B6B80),
     outline = Color(0xFFD5E1EC),
-    error = JarvisColors.Danger, errorContainer = JarvisColors.DangerContainer,
+    error = ChitraguptaColors.Danger, errorContainer = ChitraguptaColors.DangerContainer,
 )
 private val Dark = darkColorScheme(
-    primary = JarvisColors.Sky, onPrimary = JarvisColors.Navy,
-    secondary = Color(0xFF7FB2FF), onSecondary = JarvisColors.Navy,
+    primary = ChitraguptaColors.Sky, onPrimary = ChitraguptaColors.Navy,
+    secondary = Color(0xFF7FB2FF), onSecondary = ChitraguptaColors.Navy,
     background = Color(0xFF07111F), onBackground = Color(0xFFE6EEF7),
     surface = Color(0xFF0E1D33), onSurface = Color(0xFFE6EEF7),
     surfaceVariant = Color(0xFF16294A), onSurfaceVariant = Color(0xFF93A4BA),
@@ -141,7 +141,7 @@ private val Dark = darkColorScheme(
 private val Family = FontFamily.SansSerif
 private val Regular = FontWeight.Normal
 private val Semi = FontWeight.SemiBold
-val JarvisTypography = Typography(
+val ChitraguptaTypography = Typography(
     displayMedium = TextStyle(fontFamily = Family, fontWeight = Semi, fontSize = 32.sp, lineHeight = 40.sp,
         fontFeatureSettings = "tnum"),
     titleLarge = TextStyle(fontFamily = Family, fontWeight = Semi, fontSize = 20.sp, lineHeight = 28.sp),
@@ -152,18 +152,18 @@ val JarvisTypography = Typography(
 
 object Spacing { val xs = 4.dp; val s = 8.dp; val m = 12.dp; val l = 16.dp; val xl = 24.dp; val xxl = 32.dp; val huge = 48.dp }
 
-val JarvisShapes = Shapes(
+val ChitraguptaShapes = Shapes(
     small = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),   // buttons, inputs
     medium = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),  // cards
     large = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),   // sheets
 )
 
 @Composable
-fun JarvisTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+fun ChitraguptaTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
     // No dynamic colour on purpose: the brand palette must stay consistent for the demo.
     CompositionLocalProvider(LocalStatusColors provides LocalStatusColors.current) {
-        MaterialTheme(colorScheme = if (dark) Dark else Light, typography = JarvisTypography,
-            shapes = JarvisShapes, content = content)
+        MaterialTheme(colorScheme = if (dark) Dark else Light, typography = ChitraguptaTypography,
+            shapes = ChitraguptaShapes, content = content)
     }
 }
 ```
@@ -174,6 +174,6 @@ fun JarvisTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -
 3. **Font**: bundle Inter (adds about 300 KB) or stay on the system font?
 4. **Owner tabs**: Today / Menu / Team / Shop. Good, or merge Team into Shop?
 5. **Payment success**: OK with a short celebratory animation + haptic on the counter?
-6. **applicationId**: new id (e.g. `in.jarvis.shop`) installed beside the old WebView app, or replace the old one?
+6. **applicationId**: new id (e.g. `in.chitragupta.shop`) installed beside the old WebView app, or replace the old one?
 
 Next after your feedback: step 2, the project scaffold in `android/`.

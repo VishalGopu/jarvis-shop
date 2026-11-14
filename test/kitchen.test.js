@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs"; import { tmpdir } from "node:os"; import { join } from "node:path";
-process.env.DATA_DIR = mkdtempSync(join(tmpdir(), "jarvis-test-"));       // never touch real data
+process.env.DATA_DIR = mkdtempSync(join(tmpdir(), "chitragupta-test-"));       // never touch real data
 const { createOrder, markPaid, hooks, flush } = await import("../src/orders.js");
 const K = await import("../src/kitchen.js");
 const ready = []; hooks.ready = (o) => ready.push(o.number);

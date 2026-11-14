@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs"; import { tmpdir } from "node:os"; import { join } from "node:path";
-process.env.DATA_DIR = mkdtempSync(join(tmpdir(), "jarvis-multi-")); process.env.TENANCY = "multi"; process.env.TOKEN_SECRET = "test-secret";
+process.env.DATA_DIR = mkdtempSync(join(tmpdir(), "chitragupta-multi-")); process.env.TENANCY = "multi"; process.env.TOKEN_SECRET = "test-secret";
 const { runIn, cur } = await import("../src/tenant.js");
 const O = await import("../src/orders.js"), T = await import("../src/tenants.js"), U = await import("../src/usage.js"), { limiter } = await import("../src/limiter.js"), K = await import("../src/kitchen.js"), I = await import("../src/insights.js");
 

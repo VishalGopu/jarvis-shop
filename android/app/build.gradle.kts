@@ -5,12 +5,12 @@ plugins {
 }
 
 android {
-    namespace = "com.jarvis.shop"
+    namespace = "com.chitragupta.shop"
     compileSdk = 37
 
     defaultConfig {
-        // Same id as the old WebView app so this build upgrades it in place.
-        applicationId = "com.jarvis.shop"
+        // New app id after the Chitragupta rebrand: installs next to the old Jarvis build instead of upgrading it.
+        applicationId = "com.chitragupta.shop"
         minSdk = 26
         targetSdk = 36
         versionCode = 2

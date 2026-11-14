@@ -1,4 +1,4 @@
-# Jarvis for Shops
+# Chitragupta for Shops
 
 A voice-first, multilingual counter assistant for college canteens and small food stalls
 (built for the Paytm AI track: *an AI business partner for every merchant*).

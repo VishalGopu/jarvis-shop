@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Jarvis for Shops</title>
+<title>Chitragupta for Shops</title>
 <style>
 :root{--bg:#0b1220;--card:#141c2e;--fg:#e8eefc;--mut:#8b97b5;--acc:#2dd4bf;--warn:#fbbf24}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:18px system-ui,sans-serif;min-height:100vh;display:grid;grid-template-columns:1.1fr 1fr;gap:16px;padding:16px}
@@ -13,7 +13,7 @@ table{width:100%;border-collapse:collapse}td{padding:6px 0;border-bottom:1px sol
 #qr img{width:260px;background:#fff;border-radius:12px;display:block;margin:10px auto}.big{font-size:56px;font-weight:800;text-align:center;color:var(--acc)}
 .row{display:flex;gap:8px;margin-top:10px}input{flex:1;font:inherit;padding:12px;border-radius:12px;border:1px solid #26314d;background:#0e1626;color:var(--fg)}
 </style></head><body>
-<div class="card"><h1 id="shop">Jarvis</h1><div class="mut">Speak in any Indian language · hold the button and talk</div>
+<div class="card"><h1 id="shop">Chitragupta</h1><div class="mut">Speak in any Indian language · hold the button and talk</div>
 <div style="text-align:right"><button class="ghost" id="role" style="padding:6px 10px;font-size:13px">↩ role</button> <button class="ghost" id="srv" style="padding:6px 10px;font-size:13px">⚙ server</button></div><div id="face">🤖</div><div id="say">Hi! What would you like to order?</div>
 <button id="talk">🎤 Hold to speak</button>
 <div class="row"><input id="txt" placeholder="…or type (e.g. two dosa and a chai)"><button class="ghost" id="send">Send</button></div>
@@ -28,11 +28,11 @@ import { fmtQty, unitPrice } from "/units.js";
 setServer(false);
 let cfg, cart = [], lang = "en-IN", orderId = null, poll = null, lines = [], total = 0;
 const $ = (id) => document.getElementById(id);
-cfg = { menu: { shop: "Jarvis", items: [] }, mock: true, profile: { payWhen: "before", words: {} } };
+cfg = { menu: { shop: "Chitragupta", items: [] }, mock: true, profile: { payWhen: "before", words: {} } };
 const after = () => cfg.profile?.payWhen === "after", W = () => cfg.profile?.words || {};
 async function loadCfg() {
   try {
-    cfg = await get("/api/config"); $("shop").textContent = cfg.menu.shop + " · Jarvis";
+    cfg = await get("/api/config"); $("shop").textContent = cfg.menu.shop + " · Chitragupta";
     $("menu").innerHTML = cfg.menu.items.map((i) => i.soldOut ? `<button disabled style="opacity:.4">${i.name}<br><span class="mut">Sold out</span></button>` : `<button data-add="${i.id}">${i.name}<br><span class="mut">${unitPrice(i)}${i.stock != null && i.stock <= 3 * (i.step || 1) ? ` · only ${fmtQty(i.stock, i.unit)} left` : ""}</span></button>`).join("");
     $("pay").textContent = after() ? "Send to " + (W().staff || "kitchen").toLowerCase() : "Pay with UPI"; $("tablebox").style.display = cfg.profile?.table ? "" : "none";
     $("txt").placeholder = after() && cfg.profile.fulfil === "pack" ? "…or type (e.g. 1 kg rice, half kg sugar)" : "…or type (e.g. two dosa and a chai)";

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-const dir = mkdtempSync(join(tmpdir(), "jarvis-ins-")); process.env.DATA_DIR = dir;
+const dir = mkdtempSync(join(tmpdir(), "chitragupta-ins-")); process.env.DATA_DIR = dir;
 const now = Date.now(), day = 86400000, h = new Date(now).setHours(13, 0, 0, 0);
 const o = (n, t, items) => ({ id: "O" + n, number: n, lines: items, total: items.reduce((s, l) => s + l.qty * l.price, 0), status: "delivered", createdAt: t, paidAt: t, readyAt: t + 240000, deliveredAt: t + 300000, lang: "en-IN" });
 const chai = (q) => ({ id: "chai", name: "Chai", qty: q, price: 10 }), dosa = (q) => ({ id: "masala_dosa", name: "Masala Dosa", qty: q, price: 60 });

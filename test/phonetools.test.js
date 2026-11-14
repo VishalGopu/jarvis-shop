@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs"; import { tmpdir } from "node:os"; import { join } from "node:path";
 import { EventEmitter } from "node:events";
-process.env.DATA_DIR = mkdtempSync(join(tmpdir(), "jarvis-phone-")); process.env.SHOP = "kirana"; process.env.PARSER = "rules"; process.env.VOICE_KEY = "test-key";
+process.env.DATA_DIR = mkdtempSync(join(tmpdir(), "chitragupta-phone-")); process.env.SHOP = "kirana"; process.env.PARSER = "rules"; process.env.VOICE_KEY = "test-key";
 const { handlePhoneTool } = await import("../src/voice.js"), { loadTenant, orders } = await import("../src/orders.js");
 
 const hooks = { tenantFor: async () => loadTenant("default"), onOrder: () => { hooks.notified = (hooks.notified || 0) + 1; } };
