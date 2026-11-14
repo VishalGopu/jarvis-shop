@@ -1,10 +1,10 @@
 {
  "id": "tiffin",
- "label": "Tiffin point (pay at pickup)",
+ "label": "Tiffin point (pay when ordering)",
  "kindLabel": "tiffin point",
  "shop": "Annapurna Tiffins",
  "fulfil": "kitchen",
- "payWhen": "after",
+ "payWhen": "before",
  "table": false,
  "words": {
   "staff": "Chef",

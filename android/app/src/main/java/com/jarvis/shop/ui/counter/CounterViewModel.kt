@@ -193,12 +193,17 @@ class CounterViewModel(private val graph: AppGraph) : ViewModel() {
                 delay(2000)
                 val st = runCatching { repo.orderStatus(orderId) }.getOrNull() ?: continue
                 val cur = _state.value.sheet as? Sheet.Pay ?: return@launch
+                if (cur.paid) {   // already paid: keep the result sheet live until the kitchen has it ready
+                    _state.update { it.copy(sheet = cur.copy(order = st.order)) }
+                    if (st.order.status == "ready" || st.order.status == "delivered") return@launch
+                    continue
+                }
                 if (st.order.paidAt != null) {
                     _state.update { it.copy(sheet = cur.copy(order = st.order, paid = true, pin = st.pin),
                         lines = if (cur.order.id == orderId && !cur.order.status.equals("ready")) emptyList() else it.lines, successTick = it.successTick + 1) }
                     graph.speaker.play(st.announce?.audio)
                     refreshReady()
-                    return@launch
+                    continue
                 }
                 if (st.order.status == "cancelled") { _state.update { it.copy(sheet = null) }; return@launch }
             }

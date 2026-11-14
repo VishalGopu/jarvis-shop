@@ -7,7 +7,9 @@ import { stt, tts, sarvamEnabled } from "./sarvam.js";
 import { Endpointer, pcm8kToWav16k, wavTo8kPcm, parsePickup, fmtClock, PHONE_RATE } from "./telephony.js";
 import { runIn } from "./tenant.js";
 import { allowed, track } from "./usage.js";
-import { menu, priceCart, createOrder, isOut, persist, holdForPickup } from "./orders.js";
+import { menu, priceCart, createOrder, isOut, persist, holdForPickup, cancelOrder } from "./orders.js";
+import { payToken } from "./tenants.js";
+import { sendSms } from "./sms.js";
 import { parse, applyToCart } from "./parser.js";
 import { say } from "./phrases.js";
 import { lineText, unitPrice } from "../public/units.js";
@@ -169,6 +171,11 @@ async function priceSpoken(text) {
 }
 /** True when the caller named more things than we matched (e.g. an item that is not on the menu). */
 const missed = (text, priced) => text.split(/,|\band\b|\baur\b|\bplus\b|और/i).filter((x) => /[a-z\u0900-\u0DFF]{3,}/i.test(x)).length > priced.lines.length;
+/** Caller number as the digits SMS gateways expect (+91XXXXXXXXXX), or null when it does not look like an Indian mobile. */
+export function toMobile(s) {
+  let d = String(s || "").replace(/\D/g, ""); if (d.length === 12 && d.startsWith("91")) d = d.slice(2); else if (d.length === 11 && d.startsWith("0")) d = d.slice(1);
+  return /^[6-9]\d{9}$/.test(d) ? "+91" + d : null;
+}
 const summary = (priced) => `${priced.lines.map((l) => lineText(l, true)).join(", ")}. Total ${priced.total} rupees.`;
 
 export async function handlePhoneTool(req, res, hooks) {
@@ -182,7 +189,6 @@ export async function handlePhoneTool(req, res, hooks) {
   const route = url.pathname.replace(/\/+$/, "");
   try {
     return await runIn(tenant, async () => {
-      if (menu.payWhen !== "after") return send(200, { ok: false, message: "This shop cannot take phone orders right now. Please ask the caller to visit the counter." });
       if (route === "/phone/menu") {
         const items = menu.items.filter((i) => !isOut(i.id));
         return send(200, { ok: true, shop: menu.shop, items: items.map((i) => ({ name: i.name, price: unitPrice(i), also_called: i.aliases?.slice(0, 4) })),
@@ -204,10 +210,24 @@ export async function handlePhoneTool(req, res, hooks) {
         let at = null; const mins = Number(input.pickup_in_minutes);
         if (mins > 0 && mins <= 360) at = Date.now() + mins * 60e3; else if (input.pickup_text) at = parsePickup(String(input.pickup_text));
         if (at == null) return send(200, { ok: false, needs: "pickup_time", message: `I could not use that pickup time. It is ${fmtClock(Date.now())} now, and pickup must be within the next 6 hours, not in the past. Nothing is booked yet. Tell the caller this is not a system problem, then ask for a time from now, for example in twenty minutes or at six thirty.` });
+        const payFirst = menu.payWhen === "before"; let mobile = null;
+        if (payFirst) { mobile = toMobile(input.pay_phone) || toMobile(input.caller);
+          if (!mobile) return send(200, { ok: false, needs: "phone_number", message: "I could not get a valid mobile number to send the payment link to. Ask the caller to say their 10 digit mobile number, then try again. Nothing is booked yet." }); }
         let order; try { order = createOrder(priced.lines.map((l) => ({ id: l.id, qty: l.qty, note: l.note })), "en-IN"); }
         catch (e) { return send(200, { ok: false, message: `Could not book: ${e.message}. Ask the caller what to change.` }); }
-        Object.assign(order, { source: "phone", pickupAt: at, caller: input.caller ? String(input.caller).slice(0, 20) : null }); holdForPickup(order, at); persist();
+        Object.assign(order, { source: "phone", pickupAt: at, caller: (mobile || String(input.caller || "")).slice(0, 20) || null });
+        if (!payFirst) holdForPickup(order, at); persist();
         if (input.call_id) { booked.set(String(input.call_id), { number: order.number, at: Date.now() }); if (booked.size > 500) booked.delete(booked.keys().next().value); }
+        if (payFirst) {   // pay first: the kitchen hears about it once the customer pays through the SMS link
+          const link = `${(process.env.PUBLIC_URL || "").replace(/\/$/, "")}/pay/${payToken(tenant.id, order.id)}`;
+          const text = (process.env.SMS_PAY_TEMPLATE || "{shop}: pay Rs {total} to confirm order {number} (pickup {time}): {link}").replace("{shop}", menu.shop).replace("{total}", order.total).replace("{number}", order.number).replace("{time}", fmtClock(at)).replace("{link}", link);
+          const sms = await sendSms(mobile, text, menu.shop);
+          if (!sms.ok) { cancelOrder(order.id); if (input.call_id) booked.delete(String(input.call_id)); log(`order #${order.number} cancelled, SMS failed: ${sms.error}`);
+            return send(200, { ok: false, message: "I could not send the payment link right now, so nothing is booked. Apologise and ask the caller to try again in a few minutes." }); }
+          log(`order #${order.number} reserved for ${fmtClock(at)} (₹${order.total}), payment link sent${sms.mock ? " (mock SMS)" : ""}`);
+          return send(200, { ok: true, order_number: order.number, total: order.total, pickup_time: fmtClock(at), payment: "link_sent",
+            message: `Order number ${order.number} is reserved for ${fmtClock(at)}. ${summary(priced)} A payment link has been sent by SMS to the caller's phone. The order is confirmed only after the caller pays through that link, so ask them to open the SMS and pay now. Do not say it is paid.` });
+        }
         hooks.onOrder?.(tenant, order);
         log(`order #${order.number} booked by tool for ${fmtClock(at)} (₹${order.total})`);
         return send(200, { ok: true, order_number: order.number, total: order.total, pickup_time: fmtClock(at),

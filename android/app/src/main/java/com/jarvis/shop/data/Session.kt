@@ -1,6 +1,7 @@
 package com.jarvis.shop.data
 
 import android.content.Context
+import com.jarvis.shop.BuildConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,7 +30,7 @@ class SessionStore(context: Context) {
     val ownerUnlocked = MutableStateFlow(false)
 
     private fun read() = SessionState(
-        serverUrl = prefs.getString("server", "") ?: "",
+        serverUrl = prefs.getString("server", "")?.takeIf { it.isNotBlank() } ?: BuildConfig.DEFAULT_SERVER_URL,
         multi = prefs.getBoolean("multi", false),
         shopName = prefs.getString("shopName", "") ?: "",
         shopCode = prefs.getString("shopCode", "") ?: "",

@@ -140,6 +140,11 @@ export function parseKitchen(text) {
 }
 const restock = (o) => o.lines.forEach((l) => { const m = byId[l.id]; if (m?.stock != null && !l.unavailable) m.stock = r2(m.stock + l.qty); });
 // cancel: always while unpaid; in pay-after shops also while the team is still working on it
+/** Phone orders that were never paid free their stock after ttl. Returns the cancelled orders. */
+export function expireUnpaidPhone(now = Date.now(), ttl = (Number(process.env.PAY_TTL_MIN) || 15) * 60e3) {
+  const gone = orders.filter((o) => o.source === "phone" && o.status === "awaiting_payment" && now - o.createdAt > ttl);
+  gone.forEach((o) => { o.status = "cancelled"; restock(o); }); if (gone.length) persist(); return gone;
+}
 export function cancelOrder(id) { const o = orders.find((x) => x.id === id); if (!o || !(o.status === "awaiting_payment" || (menu.payWhen === "after" && (o.status === "cooking" || o.status === "scheduled")))) return null; o.status = "cancelled"; restock(o); persist(); return o; }
 // pay-first shops hand over against the 4-digit code the customer heard when paying (pay-after shops hand over at the counter on payment)
 export const pinOk = (num, pin) => { const o = orders.find((x) => x.number === num); return !o || menu.payWhen === "after" || !o.pin || String(pin || "").trim() === o.pin; };

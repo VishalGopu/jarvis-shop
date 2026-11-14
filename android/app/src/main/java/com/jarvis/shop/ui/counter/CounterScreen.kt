@@ -267,7 +267,13 @@ private fun PaySheet(p: Sheet.Pay, mock: Boolean, vm: CounterViewModel) {
             Text("Pickup code", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(p.pin, style = MaterialTheme.typography.displayMedium)
         }
-        Text("Sent to the kitchen", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        when (p.order.status) {
+            "ready" -> StatusChip("Ready: collect at the counter", Tone.Success, icon = Icons.Filled.CheckCircle)
+            "delivered" -> StatusChip("Collected", Tone.Success, icon = Icons.Filled.CheckCircle)
+            "scheduled" -> StatusChip("Booked for later", Tone.Info)
+            else -> StatusChip("Being prepared", Tone.Info)
+        }
+        Text("The kitchen has your order. This updates when it's ready.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         JarvisButton("Done", vm::closeSheet, Modifier.fillMaxWidth())
         return
     }

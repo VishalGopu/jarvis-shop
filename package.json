@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "node --env-file-if-exists=.env server.js",
-    "test": "node test/audio.test.js && node test/telephony.test.js && node test/phonetools.test.js && node test/flow.test.js && node test/kitchen.test.js && node test/insights.test.js && node test/kirana.test.js && node test/tenancy.test.js",
+    "test": "node test/audio.test.js && node test/telephony.test.js && node test/phonetools.test.js && node test/payfirst.test.js && node test/flow.test.js && node test/kitchen.test.js && node test/insights.test.js && node test/kirana.test.js && node test/tenancy.test.js",
     "demo": "node scripts/seed-demo.mjs canteen && DATA_DIR=demo-data node --env-file-if-exists=.env server.js",
     "demo:kirana": "node scripts/seed-demo.mjs kirana && DATA_DIR=demo-kirana node --env-file-if-exists=.env server.js",
     "loadtest": "node scripts/loadtest.mjs",

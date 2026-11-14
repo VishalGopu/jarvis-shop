@@ -13,6 +13,8 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import com.jarvis.shop.AppGraph
+import com.jarvis.shop.BuildConfig
+import com.jarvis.shop.ui.onboarding.ServerCheck
 import com.jarvis.shop.ui.onboarding.ConnectScreen
 import com.jarvis.shop.ui.onboarding.CreateDetailsScreen
 import com.jarvis.shop.ui.onboarding.CreateTypeScreen
@@ -55,11 +57,13 @@ private fun Onboarding(graph: AppGraph) {
     }
     val st by vm.state.collectAsState()
     androidx.compose.runtime.LaunchedEffect(st.createdCode) { if (st.createdCode != null && back.lastOrNull() != ShopReady) back.add(ShopReady) }
+    // the embedded server did not answer: fall back to the manual address screen so the app is never stuck
+    androidx.compose.runtime.LaunchedEffect(st.check) { if (st.check is ServerCheck.Failed && back.lastOrNull() == Welcome) back.add(Connect) }
     NavDisplay(
         backStack = back,
         onBack = { pop() },
         entryProvider = entryProvider {
-            entry<Welcome> { WelcomeScreen(onStart = { back.add(Connect) }, onScan = scan) }
+            entry<Welcome> { WelcomeScreen(onStart = { if (BuildConfig.DEFAULT_SERVER_URL.isNotBlank()) vm.checkServer { afterConnect() } else back.add(Connect) }, onScan = scan) }
             entry<Connect> { ConnectScreen(vm, onBack = { pop() }, onScan = scan, onConnected = afterConnect) }
             entry<RolePick> { RolePickScreen(vm, onBack = { pop() }) }
             entry<Choose> { JoinOrCreateScreen(onBack = { pop() }, onJoin = { back.add(Join) }, onCreate = { back.add(CreateType) }) }

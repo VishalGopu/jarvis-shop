@@ -6,15 +6,16 @@ import { wavDuration } from "./src/audio.js";
 import { createQr, verifyPaid, isMock } from "./src/pay.js";
 import { runIn, isMulti, cur } from "./src/tenant.js";
 import { loadState } from "./src/store.js";
-import { createShop, shopByCode, getShop, listShops, publicShop, pinOkFor, issue, verify, can, locked, failed, cleared, signupAllowed, ROLES } from "./src/tenants.js";
+import { verifyPayToken, createShop, shopByCode, getShop, listShops, publicShop, pinOkFor, issue, verify, can, locked, failed, cleared, signupAllowed, ROLES } from "./src/tenants.js";
 import { allowed, track, usageView } from "./src/usage.js";
-import { startDue, phoneLeadMs, tenants, loadTenant, unloadTenant, flushAll, orders, menu, profiles, soldOut, isOut, priceCart, createOrder, markPaid, settle, markOrderReady, markLine, markUnavailable, allocateDish, parseKitchen, cancelOrder, deliver, pinOk, setSoldOut, setShop, setCatalog, findDish } from "./src/orders.js";
+import { startDue, phoneLeadMs, holdForPickup, expireUnpaidPhone, tenants, loadTenant, unloadTenant, flushAll, orders, menu, profiles, soldOut, isOut, priceCart, createOrder, markPaid, settle, markOrderReady, markLine, markUnavailable, allocateDish, parseKitchen, cancelOrder, deliver, pinOk, setSoldOut, setShop, setCatalog, findDish } from "./src/orders.js";
 import { lineText, unitPrice } from "./public/units.js";
 import { schedule, completeTask, transferTask, setOnline, freeChef, setKitchen, kitchenView, chefsView } from "./src/kitchen.js";
 import { facts, suggestions, briefing, answerRules, renderSuggestion, noHear, LANG_NAMES } from "./src/insights.js";
 import { ask, llmProvider } from "./src/llm.js";
 import { parse, applyToCart } from "./src/parser.js";
 import { fmtClock } from "./src/telephony.js";
+import { recentSms, smsProvider } from "./src/sms.js";
 import { say, replyLang } from "./src/phrases.js";
 import { attachVoice, handlePhoneTool } from "./src/voice.js";
 
@@ -195,6 +196,7 @@ async function app(req, res, url, role) {
     }
 
     // owner: this shop's code (to pair more devices), plan limits and today's usage
+    if (url.pathname === "/api/phone/sms") return json(res, 200, { provider: smsProvider(), messages: recentSms(menu.shop) });
     if (url.pathname === "/api/shop-info") { const meta = isMulti() ? getShop(cur().id) : null; return json(res, 200, { name: menu.shop, code: meta?.code || null, multi: isMulti(), phone: phoneInfo(meta?.code), usage: usageView(cur()) }); }
     return json(res, 404, { error: "not found" });
   } catch (e) {
@@ -216,6 +218,39 @@ async function serveStatic(res, pathname) {
 const clientIp = (req) => (process.env.TRUST_PROXY ? String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() : "") || req.socket.remoteAddress || "?";
 const summary = (id) => { const t = tenants.get(id), st = t || loadState(id) || {}, d0 = new Date().setHours(0, 0, 0, 0), list = (t ? t.orders : st.orders) || [], today = list.filter((o) => (o.paidAt || o.createdAt) >= d0 && o.status !== "cancelled");
   return { ordersToday: today.length, revenueToday: today.filter((o) => o.paidAt).reduce((s, o) => s + o.total, 0), ordersTotal: list.length, usage: (t ? t.usage : st.usage) || {}, loaded: !!t }; };
+// ---- pay link (opened from the SMS): no login, the signed token names the shop and the order. PAYMENT_MODE=mock shows a simulated Paytm checkout.
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const payPage = (res, code, inner) => { res.writeHead(code, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer" });
+  res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pay for your order</title><style>
+:root{color-scheme:light dark}body{margin:0;font:18px system-ui,sans-serif;background:#f3f6fb;color:#0b1b3a;display:flex;justify-content:center;padding:18px}@media(prefers-color-scheme:dark){body{background:#0b1220;color:#e8eefc}.card{background:#141c2e!important}}
+.card{background:#fff;border-radius:20px;padding:22px;max-width:420px;width:100%;box-shadow:0 6px 24px #0002}h1{font-size:22px;margin:0 0 4px}.mut{opacity:.7;font-size:15px}.row{display:flex;justify-content:space-between;margin:8px 0}.tot{font-size:30px;font-weight:800;margin:14px 0}
+button{width:100%;font:inherit;font-weight:700;border:0;border-radius:14px;padding:16px;background:#00baf2;color:#012b72;margin-top:10px;cursor:pointer}button[disabled]{opacity:.6}.ok{color:#16a34a;font-size:48px;text-align:center}.demo{background:#fff7e0;color:#7a5b00;border-radius:10px;padding:8px 10px;font-size:14px;margin-top:14px}</style></head><body><div class="card">${inner}</div></body></html>`); };
+async function payRoute(req, res, p) {
+  const m = p.match(/^\/pay\/([^/]+)(\/confirm)?$/), tok = m && verifyPayToken(m[1]);
+  if (!tok) return payPage(res, 404, "<h1>Link not valid</h1><p class='mut'>This payment link is not valid. Ask the shop for a new one.</p>");
+  let t; if (isMulti()) { const meta = getShop(tok.shop); if (!meta) return payPage(res, 404, "<h1>Shop not found</h1>"); t = loadTenant(meta.id, { name: meta.name, profile: meta.profile, plan: meta.plan }); } else t = loadTenant("default");
+  if (!t.hooks.ready) wire(t);
+  return await runIn(t, async () => {
+    const o = orders.find((x) => x.id === tok.order); if (!o) return payPage(res, 404, "<h1>Order not found</h1>");
+    const items = o.lines.map((l) => `<div class="row"><span>${esc(lineText(l, true))}</span><span>₹${l.amount}</span></div>`).join(""), when = o.pickupAt ? fmtClock(o.pickupAt) : "";
+    const done = `<div class="ok">✔</div><h1 style="text-align:center">Payment received</h1><p style="text-align:center">Order <b>#${o.number}</b>${when ? ` · pickup <b>${esc(when)}</b>` : ""}</p><p class="mut" style="text-align:center">Show this code at ${esc(menu.shop)}: <b style="font-size:26px;letter-spacing:4px">${esc(o.pin)}</b></p>`;
+    if (m[2]) {                                                                            // POST /pay/<token>/confirm
+      if (req.method !== "POST") return json(res, 405, { error: "use POST" });
+      if (o.status !== "awaiting_payment") return json(res, 200, { ok: o.status !== "cancelled", status: o.status, number: o.number });
+      if (!isMock()) return json(res, 501, { ok: false, error: "Paytm checkout is not wired for links yet" });
+      o.mockPaid = true;
+      if (!(await verifyPaid(o))) return json(res, 402, { ok: false, error: "payment not confirmed" });
+      markPaid(o); if (o.source === "phone" && o.pickupAt) holdForPickup(o, o.pickupAt);
+      await voiceHooks.onOrder(t, o);                                                      // tells the kitchen now, or schedules it if pickup is later
+      return json(res, 200, { ok: true, status: o.status, number: o.number, pin: o.pin });
+    }
+    if (o.status === "cancelled") return payPage(res, 410, "<h1>Link expired</h1><p class='mut'>This order was not paid in time and was cancelled. Please call the shop again.</p>");
+    if (o.status !== "awaiting_payment") return payPage(res, 200, done);
+    return payPage(res, 200, `<h1>${esc(menu.shop)}</h1><p class="mut">Order #${o.number}${when ? ` · pickup ${esc(when)}` : ""}</p>${items}<div class="tot">₹${o.total}</div>
+<button id="pay">Pay ₹${o.total} with Paytm</button><p class="mut" id="msg"></p><div class="demo">Demo checkout: this simulates Paytm. No money is charged.</div>
+<script>document.getElementById("pay").onclick=async function(){this.disabled=true;document.getElementById("msg").textContent="Processing…";try{const r=await fetch(location.pathname+"/confirm",{method:"POST"});const j=await r.json();if(j.ok){document.querySelector(".card").innerHTML=${JSON.stringify(done)}}else{document.getElementById("msg").textContent=j.error||"Payment failed";this.disabled=false}}catch(e){document.getElementById("msg").textContent="Network problem, try again";this.disabled=false}}</script>`);
+  });
+}
 async function gateway(req, res) {
   const url = new URL(req.url, "http://x"), p = url.pathname;
   if (req.method === "OPTIONS") { res.writeHead(204, { ...CORS, ...(req.headers["access-control-request-private-network"] === "true" ? { "Access-Control-Allow-Private-Network": "true" } : {}) }); return res.end(); }
@@ -223,6 +258,7 @@ async function gateway(req, res) {
     if (p === "/api/health") return json(res, 200, { ok: true, multi: isMulti(), shopsLoaded: tenants.size });
     if (p === "/api/mode") return json(res, 200, { multi: isMulti(), types: Object.values(profiles).map((x) => ({ id: x.id, label: x.label })) });
     if (p.startsWith("/phone/")) return await handlePhoneTool(req, res, voiceHooks);
+    if (p.startsWith("/pay/")) return await payRoute(req, res, p);
     if (!p.startsWith("/api/")) return await serveStatic(res, p);
     let tenant, role = "owner";
     if (isMulti()) {
@@ -286,7 +322,7 @@ attachVoice(voiceServer, voiceHooks);
 // idle shops are flushed and unloaded so memory follows ACTIVE shops, not registered ones
 if (isMulti()) setInterval(() => { const idle = +process.env.TENANT_IDLE_MS || 15 * 60e3; for (const [id, t] of tenants) if (Date.now() - t.lastUsed > idle && t.clients.size === 0 && !runIn(t, () => orders.some((o) => o.status === "scheduled"))) unloadTenant(id); }, 60e3).unref();   // a shop with phone orders waiting stays loaded so they start on time
 // Start scheduled phone orders when their time comes: put them in the kitchen and remind everyone.
-setInterval(() => { for (const t of tenants.values()) runIn(t, () => { const due = startDue(); if (!due.length) return; for (const o of due) emit("reminder", { order: view(o), lang: KITCHEN_LANG, text: say(KITCHEN_LANG).phoneRemind(o.number, fmtClock(o.pickupAt)) }); dispatch(); }); }, 15000).unref();
+setInterval(() => { for (const t of tenants.values()) runIn(t, () => { if (expireUnpaidPhone().length) emit("update"); const due = startDue(); if (!due.length) return; for (const o of due) emit("reminder", { order: view(o), lang: KITCHEN_LANG, text: say(KITCHEN_LANG).phoneRemind(o.number, fmtClock(o.pickupAt)) }); dispatch(); }); }, 15000).unref();
 // load the shops that take phone orders at boot, so orders scheduled before a restart still start on time
 (async () => { if (!process.env.VOICE_KEY) return; if (!isMulti()) return void voiceHooks.tenantFor(""); for (const s of listShops()) if (phoneShopOk(s.code)) await voiceHooks.tenantFor(s.code); })().catch((e) => console.error("phone shop preload failed:", e.message));
 

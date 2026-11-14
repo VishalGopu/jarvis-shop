@@ -50,3 +50,11 @@ Each response has `ok` and a plain-English `message` the agent can read out. `bo
   (on `**61*N**15#`, busy `**67*N#`, off `##61#`). The card only appears for shops allowed by `VOICE_SHOPS`.
 - Phone orders show on the Kitchen screen with a 📞 tag and a "due <time>" label (instead of the overdue timer), and with 📞 on the Counter's collect-payment list.
 - Known gap: a phone order starts as `cooking` the moment it is booked, so kitchen tasks are dispatched immediately, not shortly before the pickup time.
+
+## Pay first (tiffin shops, `payWhen: "before"`)
+- `/phone/book` reserves the order as `awaiting_payment`, texts a pay link to the caller (`caller` / `pay_phone`, validated as an Indian mobile) and tells the agent
+  to say the order is confirmed only after payment. The kitchen hears about it when the customer pays, so nothing is cooked for unpaid orders.
+- `GET /pay/<signed token>` (served on the main port, i.e. `PUBLIC_URL`) shows the order and a simulated Paytm checkout; `POST /pay/<token>/confirm` marks it paid
+  (mock mode only), then the order is announced to the kitchen or held until 30 min before pickup. Paying twice is harmless. Unpaid phone orders cancel after `PAY_TTL_MIN`.
+- Optional: add a `pay_phone` body field (Let the agent decide, Text, optional) to `book_order` in the console so the agent can take a number when the caller ID is hidden.
+- Android: the server address is baked into the APK (`-PserverUrl=...` overrides it); the Welcome screen connects by itself and falls back to the address screen if it cannot.
