@@ -6,7 +6,7 @@ local.properties
 *.keystore
 *.jks
 # runtime data (orders, kitchen setup)
-data/
+/data/
 # dependencies and build output
 node_modules/
 apk/www/
