@@ -148,8 +148,8 @@ export function expireUnpaidPhone(now = Date.now(), ttl = (Number(process.env.PA
 /** True when this order is paid at the counter at pickup: every order in pay-after shops, and phone orders in any shop. */
 export const owesAtPickup = (o) => menu.payWhen === "after" || !!o.payLater;
 export function cancelOrder(id) { const o = orders.find((x) => x.id === id); if (!o || !(o.status === "awaiting_payment" || (owesAtPickup(o) && (o.status === "cooking" || o.status === "scheduled")))) return null; o.status = "cancelled"; restock(o); persist(); return o; }
-// pay-first shops hand over against the 4-digit code the customer heard when paying (pay-after shops hand over at the counter on payment)
-export const pinOk = (num, pin) => { const o = orders.find((x) => x.number === num); return !o || owesAtPickup(o) || !o.pin || String(pin || "").trim() === o.pin; };
+// every order has a 4-digit pickup code the customer is given when ordering; the counter checks it before handing over (or billing, for orders paid at pickup)
+export const pinOk = (num, pin) => { const o = orders.find((x) => x.number === num); return !o || !o.pin || String(pin || "").trim() === o.pin; };
 export function deliver(num) { const o = orders.find((x) => x.number === num && x.status === "ready"); if (o && (!owesAtPickup(o) || o.paidAt)) { o.status = "delivered"; o.deliveredAt = Date.now(); persist(); return o; } return null; }
 // picker cannot find an item: drop it from the bill (only where payment comes after packing)
 export function markUnavailable(number, lineId) {

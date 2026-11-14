@@ -22,8 +22,8 @@ class ShopRepository(private val api: ApiClient, private val session: SessionSto
     suspend fun checkout(cart: List<CartItem>, lang: String): CheckoutResponse = api.post("/api/checkout", CheckoutRequest(cart, lang))
     suspend fun orderStatus(id: String): OrderStatus = api.get("/api/order/$id")
     suspend fun mockPay(id: String) = api.postEmpty("/api/order/$id/mock-pay")
-    suspend fun bill(id: String): CheckoutResponse = api.post("/api/order/$id/bill", EmptyBody)
-    suspend fun cash(id: String): OrderResponse = api.post("/api/order/$id/cash", EmptyBody)
+    suspend fun bill(id: String, req: BillRequest = BillRequest()): CheckoutResponse = api.post("/api/order/$id/bill", req)
+    suspend fun cash(id: String, req: BillRequest = BillRequest()): OrderResponse = api.post("/api/order/$id/cash", req)
     suspend fun cancel(id: String): OkResponse = api.post("/api/order/$id/cancel", EmptyBody)
     suspend fun deliver(req: DeliverRequest): OkResponse = api.post("/api/deliver", req)
 

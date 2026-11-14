@@ -240,7 +240,11 @@ private fun CounterSheet(sheet: Sheet, mock: Boolean, payAfter: Boolean, vm: Cou
                 is Sheet.Sent -> {
                     SuccessMark()
                     Text("Order #${sheet.order.number}", style = MaterialTheme.typography.displayMedium)
-                    Text("Sent to the team. Call the number when it's ready.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                    sheet.pin?.let { code ->
+                        Text("Pickup code", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(code, style = MaterialTheme.typography.displayMedium)
+                    }
+                    Text("Sent to the team. Keep your number and pickup code to collect.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                     ChitraguptaButton("Done", vm::closeSheet, Modifier.fillMaxWidth())
                 }
                 is Sheet.Handover -> HandoverSheet(sheet, payAfter || sheet.order.payLater, vm)
@@ -295,9 +299,15 @@ private fun HandoverSheet(h: Sheet.Handover, payAfter: Boolean, vm: CounterViewM
     h.order.lines.forEach { Text("${fmtQty(it.qty, it.unit)} ${it.name}", style = MaterialTheme.typography.bodyLarge) }
     if (h.error != null) BannerMessage(h.error, Tone.Error)
     if (h.order.paidAt == null) {
+        var billPin by remember { mutableStateOf("") }
+        var noCode by remember { mutableStateOf(false) }
         Text("₹${h.order.total} to collect", style = MaterialTheme.typography.displayMedium)
-        ChitraguptaButton("Show payment QR", vm::billWithQr, Modifier.fillMaxWidth())
-        ChitraguptaButton("Cash received", vm::billWithCash, Modifier.fillMaxWidth(), kind = ButtonKind.Secondary)
+        OutlinedTextField(billPin, { billPin = it.filter(Char::isDigit).take(6) }, Modifier.fillMaxWidth(), label = { Text("Pickup code (from customer)") }, singleLine = true, enabled = !noCode,
+            shape = MaterialTheme.shapes.small, keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword))
+        val ready = noCode || billPin.length >= 3
+        ChitraguptaButton("Show payment QR", { vm.billWithQr(if (noCode) null else billPin, noCode) }, Modifier.fillMaxWidth(), enabled = ready)
+        ChitraguptaButton("Cash received", { vm.billWithCash(if (noCode) null else billPin, noCode) }, Modifier.fillMaxWidth(), kind = ButtonKind.Secondary, enabled = ready)
+        ChitraguptaButton(if (noCode) "Ask for the code instead" else "Customer has no code", { noCode = !noCode }, Modifier.fillMaxWidth(), kind = ButtonKind.Tertiary)
     } else {
         var pin by remember { mutableStateOf("") }
         StatusChip("Paid", Tone.Success, icon = Icons.Filled.CheckCircle)

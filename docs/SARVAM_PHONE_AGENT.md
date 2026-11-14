@@ -63,3 +63,9 @@ Each response has `ok` and a plain-English `message` the agent can read out. `bo
 - **Counter orders** in the tiffin shop are paid when ordering (`payWhen: "before"`: QR / simulated payment, then the kitchen starts).
 - **Phone orders** are paid at the counter when collected, in every shop: they carry `payLater: true`, go straight to the kitchen (or are held until 30 min before pickup),
   and are handed over only after the counter bills them (QR or cash). No pickup code is needed for them.
+
+## Pickup codes
+Every order gets a 4-digit pickup code when it is placed. Phone callers hear it from the agent (digit by digit, from the tool message / `pickup_code`);
+counter customers see it on the "sent to the team" or "paid" screen. The kitchen and counter lists never contain it. The counter must enter it before
+billing an order that is paid at pickup (`/api/order/:id/bill|cash` take `{pin}`) and before handing over a paid order (`/api/deliver`). Staff can tap
+"Customer has no code" (`override`) when a customer lost it.

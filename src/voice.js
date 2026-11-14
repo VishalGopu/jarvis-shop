@@ -231,8 +231,9 @@ export async function handlePhoneTool(req, res, hooks) {
         }
         hooks.onOrder?.(tenant, order);
         log(`order #${order.number} booked by tool for ${fmtClock(at)} (₹${order.total})`);
-        return send(200, { ok: true, order_number: order.number, total: order.total, pickup_time: fmtClock(at),
-          message: `Order number ${order.number} is booked for ${fmtClock(at)}. ${summary(priced)} The caller pays at the counter when they collect it.` });
+        const code = String(order.pin).split("").join(" ");   // spoken digit by digit
+        return send(200, { ok: true, order_number: order.number, total: order.total, pickup_time: fmtClock(at), pickup_code: order.pin,
+          message: `Order number ${order.number} is booked for ${fmtClock(at)}. ${summary(priced)} The caller pays at the counter when they collect it. The pickup code is ${code}. Read the code to the caller digit by digit and ask them to show it when they collect the order.` });
       }
       return send(404, { ok: false, message: "unknown tool" });
     });

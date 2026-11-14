@@ -72,7 +72,7 @@ async function app(req, res, url, role) {
     if (req.method === "POST" && url.pathname === "/api/checkout") {
       const { cart, lang, table } = JSON.parse((await body(req)).toString());
       let o; try { o = createOrder(cart, replyLang(lang), table); } catch (e) { return json(res, 409, { error: e.message }); }
-      if (menu.payWhen === "after") { dispatch(); emit("order", { order: view(o), text: slipText(o) }); return json(res, 200, { order: view(o), qr: null, payLater: true }); }   // slip goes straight to the team; billed when packed
+      if (menu.payWhen === "after") { dispatch(); emit("order", { order: view(o), text: slipText(o) }); return json(res, 200, { order: view(o), qr: null, payLater: true, pin: o.pin }); }   // slip goes straight to the team; billed when packed
       return json(res, 200, { order: view(o), qr: await createQr(o) });
     }
 
@@ -92,6 +92,8 @@ async function app(req, res, url, role) {
     // pay-after shops: bill a finished order at the counter (UPI QR for the final amount, or cash)
     if (req.method === "POST" && (m = url.pathname.match(/^\/api\/order\/(ORD\d+)\/(bill|cash)$/))) {
       const o = orders.find((x) => x.id === m[1]); if (!o) return json(res, 404, { error: "no such order" });
+      const bb = JSON.parse((await body(req)).toString() || "{}");
+      if (!bb.override && !pinOk(o.number, bb.pin)) return json(res, 403, { error: "wrong pickup code" });          // the customer shows their code before paying and collecting
       if ((menu.payWhen !== "after" && !o.payLater) || o.status !== "ready" || o.paidAt) return json(res, 409, { error: "order is not waiting for payment" });
       if (m[2] === "cash") { settle(o, "cash"); emit("update"); return json(res, 200, { order: view(o) }); }
       return json(res, 200, { order: view(o), qr: await createQr(o) });

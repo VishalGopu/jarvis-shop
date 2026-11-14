@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.chitragupta.shop.AppGraph
 import com.chitragupta.shop.audio.Recorder
 import com.chitragupta.shop.data.ApiException
+import com.chitragupta.shop.data.BillRequest
 import com.chitragupta.shop.data.CartItem
 import com.chitragupta.shop.data.Config
 import com.chitragupta.shop.data.DeliverRequest
@@ -27,7 +28,7 @@ sealed interface Sheet {
     /** Customer pays first (or a ready order is being billed): show the QR and wait for the server to confirm. */
     data class Pay(val order: Order, val qr: String?, val paid: Boolean = false, val pin: String? = null, val busy: Boolean = false, val error: String? = null) : Sheet
     /** Pay-later shops: the order went straight to the team. */
-    data class Sent(val order: Order) : Sheet
+    data class Sent(val order: Order, val pin: String? = null) : Sheet
     /** An order that is ready and needs billing and/or handing over. */
     data class Handover(val order: Order, val busy: Boolean = false, val error: String? = null) : Sheet
 }
@@ -174,7 +175,7 @@ class CounterViewModel(private val graph: AppGraph) : ViewModel() {
             try {
                 val r = repo.checkout(cart(), s.lang)
                 if (r.payLater) {
-                    _state.update { it.copy(sheet = Sheet.Sent(r.order), lines = emptyList(), reply = null, heard = null, successTick = it.successTick + 1) }
+                    _state.update { it.copy(sheet = Sheet.Sent(r.order, r.pin), lines = emptyList(), reply = null, heard = null, successTick = it.successTick + 1) }
                 } else {
                     _state.update { it.copy(sheet = Sheet.Pay(r.order, r.qr)) }
                     watchPayment(r.order.id)
@@ -236,22 +237,22 @@ class CounterViewModel(private val graph: AppGraph) : ViewModel() {
     // ---- ready orders: bill (pay-after shops) and hand over
     fun openHandover(o: Order) { _state.update { it.copy(sheet = Sheet.Handover(o)) } }
 
-    fun billWithQr() {
+    fun billWithQr(pin: String?, override: Boolean) {
         val h = _state.value.sheet as? Sheet.Handover ?: return
         viewModelScope.launch {
             try {
-                val r = repo.bill(h.order.id)
+                val r = repo.bill(h.order.id, BillRequest(pin, override))
                 _state.update { it.copy(sheet = Sheet.Pay(r.order, r.qr)) }
                 watchPayment(r.order.id)
             } catch (e: ApiException) { _state.update { it.copy(sheet = h.copy(error = e.message)) } }
         }
     }
 
-    fun billWithCash() {
+    fun billWithCash(pin: String?, override: Boolean) {
         val h = _state.value.sheet as? Sheet.Handover ?: return
         viewModelScope.launch {
             try {
-                val r = repo.cash(h.order.id)
+                val r = repo.cash(h.order.id, BillRequest(pin, override))
                 _state.update { it.copy(sheet = h.copy(order = r.order, error = null), successTick = it.successTick + 1) }
                 refreshReady()
             } catch (e: ApiException) { _state.update { it.copy(sheet = h.copy(error = e.message)) } }

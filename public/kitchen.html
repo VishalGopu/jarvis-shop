@@ -129,7 +129,7 @@ $("boardView").onclick = async (e) => {
   const el = e.target.closest("button, [data-so]"); if (!el) return; const d = el.dataset;
   if (d.line) { const [n, id] = d.line.split("|"); send({ number: +n, lineId: id }); }
   else if (d.ready) send({ number: +d.ready });
-  else if (d.cash) { await post(`/api/order/${d.cash}/cash`, {}); load(); }
+  else if (d.cash) { const o = orders.find((x) => x.id === d.cash); const pin = prompt("Customer's pickup code for #" + (o?.number || "")); if (pin === null) return; const r = await post(`/api/order/${d.cash}/cash`, { pin }); if (r.error) note(r.error); load(); }
   else if (d.deliver) { const pin = prompt("Customer's 4-digit pickup code for #" + d.deliver); if (pin === null) return;
     let r = await post("/api/deliver", { number: +d.deliver, pin }); if (r.error && confirm("Wrong code. Hand over anyway?")) r = await post("/api/deliver", { number: +d.deliver, override: true }); $("heard").textContent = r.delivered ? `#${d.deliver} handed over ✔` : (r.error || "Not delivered"); load(); }
   else if (d.free) { await post(`/api/chefs/${d.free}/free`, {}); load(); }

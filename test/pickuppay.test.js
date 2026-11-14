@@ -20,7 +20,9 @@ const far = await book({ shop: "X", order_text: "one vada", pickup_in_minutes: 1
 assert.equal(f.status, "scheduled"); assert.equal(f.payLater, true); assert.equal(O.startDue(Date.now() + 91 * 60e3).length, 1); assert.equal(f.status, "cooking");
 // handover: ready, but it cannot be handed over until it is paid at the counter; no pickup code is needed
 O.markOrderReady(o.number); assert.equal(o.status, "ready");
-assert.equal(O.deliver(o.number), null, "unpaid phone order is not handed over"); assert.equal(O.pinOk(o.number, ""), true, "no pickup code for pay-at-pickup orders");
+assert.equal(O.deliver(o.number), null, "unpaid phone order is not handed over");
+assert.match(r.message, /pickup code is \d \d \d \d/, "the caller is given the code, digit by digit"); assert.equal(r.pickup_code, o.pin);
+assert.equal(O.pinOk(o.number, ""), false, "no code, no handover"); assert.equal(O.pinOk(o.number, "0000" === o.pin ? "1111" : "0000"), false, "wrong code"); assert.equal(O.pinOk(o.number, o.pin), true, "the right code");
 assert.ok(O.settle(o, "cash")); assert.equal(o.status, "delivered"); assert.ok(o.paidAt);
 // an unpaid phone order can be cancelled while cooking (it is not paid yet), but a paid walk-in cannot
 assert.ok(O.cancelOrder(f.id), "cooking pay-later order can be cancelled"); assert.equal(f.status, "cancelled");

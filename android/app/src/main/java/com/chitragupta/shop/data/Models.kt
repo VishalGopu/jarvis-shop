@@ -56,7 +56,8 @@ enum class Role(val wire: String, val label: String) {
     val paidAt: Long? = null, val lang: String = "en-IN", val table: String? = null, val method: String? = null,
     val source: String? = null, val payLater: Boolean = false, val pickupAt: Long? = null, val startAt: Long? = null,
 ) { val isPhone get() = source == "phone" }
-@Serializable data class CheckoutResponse(val order: Order, val qr: String? = null, val payLater: Boolean = false)
+@Serializable data class CheckoutResponse(val order: Order, val qr: String? = null, val payLater: Boolean = false, val pin: String? = null)
+@Serializable data class BillRequest(val pin: String? = null, val override: Boolean = false)
 @Serializable data class Announce(val text: String = "", val audio: String? = null)
 @Serializable data class OrderStatus(val order: Order, val announce: Announce? = null, val pin: String? = null)
 @Serializable data class OkResponse(val ok: Boolean = false, val status: String? = null)
