@@ -101,10 +101,21 @@ export function numberWord(s) {
 }
 const NUM = "(\\d+|(?:(?:twenty|thirty|forty|fifty|sixty|ninety)[ -]?)?(?:one|two|three|four|five|six|seven|eight|nine)|zero|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|ninety)";
 
-/** Returns the pickup time as epoch ms, or null if it could not be understood or is unreasonable (> 6 h away). */
-export function parsePickup(text, now = Date.now()) {
-  const t = String(text || "").toLowerCase().replace(/[.,!?]/g, " ").replace(/\s+/g, " ").trim(); if (!t) return null;
-  let at = null;
+// Hindi and Telugu number / time words, mapped to the English the parser understands (the agent may pass the caller's own words).
+const WORDS = { "एक": "one", "दो": "two", "तीन": "three", "चार": "four", "पाँच": "five", "पांच": "five", "छह": "six", "छः": "six", "छे": "six", "सात": "seven", "आठ": "eight", "नौ": "nine", "दस": "ten", "ग्यारह": "eleven", "बारह": "twelve",
+  "पंद्रह": "fifteen", "बीस": "twenty", "तीस": "thirty", "चालीस": "forty", "पचास": "fifty", "बजे": "oclock", "बजकर": "oclock", "शाम": "evening", "सुबह": "morning", "दोपहर": "afternoon", "रात": "night", "मिनट": "minutes", "मिनिट": "minutes", "घंटे": "hours", "घंटा": "hour",
+  "ఒకటి": "one", "రెండు": "two", "మూడు": "three", "నాలుగు": "four", "ఐదు": "five", "ఆరు": "six", "ఏడు": "seven", "ఎనిమిది": "eight", "తొమ్మిది": "nine", "పది": "ten", "ఇరవై": "twenty", "ముప్పై": "thirty", "గంటలకు": "oclock", "గంటకు": "oclock", "సాయంత్రం": "evening", "ఉదయం": "morning", "మధ్యాహ్నం": "afternoon", "రాత్రి": "night", "నిమిషాల్లో": "minutes", "నిమిషాలు": "minutes" };
+
+/**
+ * Reads a pickup time. Returns { at } (epoch ms) or { at: null, why } where why is "unclear" (not a time we can read),
+ * "passed" (a clock time earlier today) or "far" (more than 6 h away). Accepts "in 20 minutes", "at 6:30", "five o'clock",
+ * "5 pm", "17:00", "six in the evening", and the Hindi / Telugu words for them.
+ */
+export function parsePickupDetailed(text, now = Date.now()) {
+  let t = String(text || "").toLowerCase().replace(/[.,!?]/g, " ").replace(/\s+/g, " ").trim(); if (!t) return { at: null, why: "unclear" };
+  t = t.replace(/[\u0900-\u097F\u0C00-\u0C7F]+/g, (w) => WORDS[w] ?? w).replace(/o['\u2019]?\s*clock/g, "oclock").replace(/\s+/g, " ");
+  if (/\b(tomorrow|next day|next week)\b/.test(t)) return { at: null, why: "far" };
+  let at = null, past = false;
   if (/\b(now|right away|asap|immediately|as soon as (possible|i can))\b/.test(t)) at = now + 10 * 60e3;
   else if (/\b(an|one|1) hour and a half\b|\bone and a half hours?\b/.test(t)) at = now + 90 * 60e3;
   else if (/\bhalf (an? |of an? )?hour\b/.test(t)) at = now + 30 * 60e3;
@@ -112,22 +123,37 @@ export function parsePickup(text, now = Date.now()) {
   else {
     let m = t.match(new RegExp("\\b" + NUM + "\\s*(?:minutes?|mins?)\\b"));
     if (m && numberWord(m[1]) != null) at = now + numberWord(m[1]) * 60e3;
-    else if ((m = t.match(new RegExp("\\b" + NUM + "\\s*hours?\\b"))) && numberWord(m[1]) != null) at = now + numberWord(m[1]) * 3600e3;
+    else if ((m = t.match(new RegExp("\\b" + NUM + "\\s*hours?\\b"))) && numberWord(m[1]) != null && !/\b\d{4}\s*hours?\b/.test(t)) at = now + numberWord(m[1]) * 3600e3;
     else if (/\b(an|one) hour\b/.test(t)) at = now + 3600e3;
-    else if ((m = t.match(new RegExp("\\bat\\s+" + NUM + "(?:\\s*(?:[: ]|and)\\s*" + NUM + ")?\\s*(am|pm|a m|p m)?\\b")))) {
-      let h = numberWord(m[1]), min = m[2] != null ? numberWord(m[2]) : 0; const ap = (m[3] || "").replace(" ", "");
-      if (h != null && min != null && h >= 0 && h <= 24 && min < 60) {
+    else {
+      // a clock time: with "at"/"by", an o'clock / am / pm marker, a part of the day, 17:00, 1700 hours, or when the whole phrase is just the time
+      const per = /\b(evening|afternoon|night|tonight)\b/.test(t) ? "pm" : /\bmorning\b/.test(t) ? "am" : "";
+      let h = null, min = 0, ap = per, x;
+      if ((x = t.match(/\b([01]?\d|2[0-3]):([0-5]\d)\s*(am|pm|a m|p m)?\b/))) { h = +x[1]; min = +x[2]; ap = (x[3] || "").replace(" ", "") || per; }
+      else if ((x = t.match(/\b([01]\d|2[0-3])([0-5]\d)\s*hours?\b/))) { h = +x[1]; min = +x[2]; ap = ""; }
+      else {
+        const re = new RegExp("(?:\\b(at|by|around|before|till|until)\\s+)?\\b" + NUM + "(?:\\s*(?::|\\s|and)\\s*" + NUM + ")?\\s*(oclock|am|pm|a m|p m)?\\b", "g");
+        for (const y of t.matchAll(re)) {
+          if (!(y[1] || y[4] || per || y[0].trim() === t)) continue;
+          const a = numberWord(y[2]), b = y[3] != null ? numberWord(y[3]) : 0; if (a == null || b == null) continue;
+          h = a; min = b; ap = (y[4] || "").replace(" ", "") || per; break;
+        }
+      }
+      if (h != null && h >= 0 && h <= 24 && min < 60) {
         const d = new Date(now); d.setSeconds(0, 0);
         const tryAt = (hh) => { d.setHours(hh % 24, min); return d.getTime(); };
-        if (ap === "pm") at = tryAt(h % 12 + 12); else if (ap === "am") at = tryAt(h % 12);
-        else { const c = [tryAt(h), tryAt(h % 12 + 12)].sort((x, y) => x - y); at = c.find((x) => x >= now - 5 * 60e3) ?? c[1]; }
-        if (at < now - 5 * 60e3) at += 864e5;
+        if (h > 12) at = tryAt(h); else if (ap === "pm") at = tryAt(h % 12 + 12); else if (ap === "am") at = tryAt(h % 12);
+        else { const c = [tryAt(h), tryAt(h % 12 + 12)].sort((p, q) => p - q); at = c.find((v) => v >= now - 5 * 60e3) ?? c[1]; }
+        if (at < now - 5 * 60e3) { at += 864e5; past = true; }
       }
     }
   }
-  if (at == null || at > now + 6 * 3600e3) return null;
-  return Math.max(at, now);
+  if (at == null) return { at: null, why: "unclear" };
+  if (at > now + 6 * 3600e3) return { at: null, why: past ? "passed" : "far" };
+  return { at: Math.max(at, now), why: "" };
 }
+/** Pickup time as epoch ms, or null (unreadable, already passed, or more than 6 h away). */
+export const parsePickup = (text, now = Date.now()) => parsePickupDetailed(text, now).at;
 
 /** 6:30 PM style label, spoken fine by TTS in every language we use. */
 export function fmtClock(ms) {

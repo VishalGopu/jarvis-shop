@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { wrapWav, parseWav, upsample2x, wavTo8kPcm, rms, Endpointer, parsePickup, fmtClock, numberWord } from "../src/telephony.js";
+import { wrapWav, parseWav, upsample2x, wavTo8kPcm, rms, Endpointer, parsePickup, parsePickupDetailed, fmtClock, numberWord } from "../src/telephony.js";
 import { wavDuration } from "../src/audio.js";
 
 const tone = (ms, rate, amp = 4000, freq = 300) => { const n = Math.round((ms / 1000) * rate), b = Buffer.alloc(n * 2); for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin((2 * Math.PI * freq * i) / rate) * amp), 2 * i); return b; };
@@ -45,4 +45,12 @@ assert.equal(parsePickup("tomorrow evening", now), null, "too vague");
 assert.equal(parsePickup("in ten hours", now), null, "too far");
 assert.equal(parsePickup("", now), null);
 assert.equal(numberWord("twenty five"), 25); assert.equal(numberWord("seven"), 7); assert.equal(numberWord("12"), 12);
+// the exact phrases that failed on a real call (caller said "five o'clock" at 4:31 PM; the agent passed it without "at")
+const now2 = new Date(2026, 10, 14, 16, 31, 0).getTime(), clock = (s) => { const r = parsePickup(s, now2); return r ? fmtClock(r) : null; };
+for (const [said, want] of [["five o'clock", "5:00 PM"], ["5 o'clock", "5:00 PM"], ["seven o clock", "7:00 PM"], ["six in the evening", "6:00 PM"], ["six PM", "6:00 PM"], ["5 pm", "5:00 PM"], ["5:00 PM", "5:00 PM"], ["17:00", "5:00 PM"],
+  ["1700 hours", "5:00 PM"], ["five thirty", "5:30 PM"], ["at five o'clock", "5:00 PM"], ["around 6", "6:00 PM"], ["पाँच बजे", "5:00 PM"], ["शाम के छह बजे", "6:00 PM"], ["शाम 5 बजे", "5:00 PM"], ["ఐదు గంటలకు", "5:00 PM"], ["సాయంత్రం ఆరు గంటలకు", "6:00 PM"], ["बीस मिनट", "4:51 PM"], ["in forty minutes", "5:11 PM"]])
+  assert.equal(clock(said), want, `"${said}"`);
+const why = (s) => parsePickupDetailed(s, now2).why;
+assert.equal(why("forty days"), "unclear"); assert.equal(why("two idli"), "unclear", "a number inside other words is not a time"); assert.equal(why("evening"), "unclear");
+assert.equal(why("4 o'clock"), "passed", "earlier today"); assert.equal(why("at 9 am"), "passed"); assert.equal(why("tomorrow evening"), "far"); assert.equal(why("in ten hours"), "far"); assert.equal(why("11 pm"), "far", "more than 6 h ahead");
 console.log("telephony ok");
