@@ -144,7 +144,7 @@ fun CounterScreen(graph: AppGraph, cfg: Config) {
 private fun ReadyStrip(orders: List<Order>, payAfter: Boolean, onClick: (Order) -> Unit) {
     LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = Spacing.l, vertical = Spacing.xs), horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
         items(orders, key = { it.id }) { o ->
-            val needsPay = payAfter && o.paidAt == null
+            val needsPay = (payAfter || o.payLater) && o.paidAt == null
             AssistChip(onClick = { onClick(o) },
                 label = { Text("#${o.number}${if (o.isPhone) " 📞" else ""} ready" + if (needsPay) " · collect ₹${o.total}" else "", style = MaterialTheme.typography.labelMedium) },
                 leadingIcon = { Icon(Icons.Filled.CheckCircle, null, tint = if (needsPay) Palette.Warning else Palette.Success) })
@@ -243,7 +243,7 @@ private fun CounterSheet(sheet: Sheet, mock: Boolean, payAfter: Boolean, vm: Cou
                     Text("Sent to the team. Call the number when it's ready.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                     JarvisButton("Done", vm::closeSheet, Modifier.fillMaxWidth())
                 }
-                is Sheet.Handover -> HandoverSheet(sheet, payAfter, vm)
+                is Sheet.Handover -> HandoverSheet(sheet, payAfter || sheet.order.payLater, vm)
             }
         }
     }

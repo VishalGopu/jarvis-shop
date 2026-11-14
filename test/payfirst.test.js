@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs"; import { tmpdir } from "node:os"; import { join } from "node:path";
 import { EventEmitter } from "node:events";
-process.env.DATA_DIR = mkdtempSync(join(tmpdir(), "jarvis-payfirst-")); process.env.SHOP = "tiffin"; process.env.PARSER = "rules"; process.env.VOICE_KEY = "k"; process.env.PUBLIC_URL = "https://shop.example/"; process.env.SMS_PROVIDER = "mock";
+process.env.DATA_DIR = mkdtempSync(join(tmpdir(), "jarvis-payfirst-")); process.env.SHOP = "tiffin"; process.env.PARSER = "rules"; process.env.VOICE_KEY = "k"; process.env.PUBLIC_URL = "https://shop.example/"; process.env.SMS_PROVIDER = "mock"; process.env.PHONE_PAY = "link";
 const { handlePhoneTool, toMobile } = await import("../src/voice.js"), { loadTenant, orders, expireUnpaidPhone, menu } = await import("../src/orders.js"), { recentSms } = await import("../src/sms.js");
 const { verifyPayToken } = await import("../src/tenants.js");
 assert.equal(menu.payWhen, "before", "tiffin shops are pay-first");

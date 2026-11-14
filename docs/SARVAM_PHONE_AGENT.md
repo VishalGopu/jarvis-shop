@@ -51,10 +51,15 @@ Each response has `ok` and a plain-English `message` the agent can read out. `bo
 - Phone orders show on the Kitchen screen with a 📞 tag and a "due <time>" label (instead of the overdue timer), and with 📞 on the Counter's collect-payment list.
 - Known gap: a phone order starts as `cooking` the moment it is booked, so kitchen tasks are dispatched immediately, not shortly before the pickup time.
 
-## Pay first (tiffin shops, `payWhen: "before"`)
+## Parked: pay-first phone orders by SMS link (`PHONE_PAY=link`, needs SMS provider + DLT; off by default)
 - `/phone/book` reserves the order as `awaiting_payment`, texts a pay link to the caller (`caller` / `pay_phone`, validated as an Indian mobile) and tells the agent
   to say the order is confirmed only after payment. The kitchen hears about it when the customer pays, so nothing is cooked for unpaid orders.
 - `GET /pay/<signed token>` (served on the main port, i.e. `PUBLIC_URL`) shows the order and a simulated Paytm checkout; `POST /pay/<token>/confirm` marks it paid
   (mock mode only), then the order is announced to the kitchen or held until 30 min before pickup. Paying twice is harmless. Unpaid phone orders cancel after `PAY_TTL_MIN`.
 - Optional: add a `pay_phone` body field (Let the agent decide, Text, optional) to `book_order` in the console so the agent can take a number when the caller ID is hidden.
 - Android: the server address is baked into the APK (`-PserverUrl=...` overrides it); the Welcome screen connects by itself and falls back to the address screen if it cannot.
+
+## Who pays when (current rule)
+- **Counter orders** in the tiffin shop are paid when ordering (`payWhen: "before"`: QR / simulated payment, then the kitchen starts).
+- **Phone orders** are paid at the counter when collected, in every shop: they carry `payLater: true`, go straight to the kitchen (or are held until 30 min before pickup),
+  and are handed over only after the counter bills them (QR or cash). No pickup code is needed for them.

@@ -32,14 +32,14 @@ const emitTo = (t, type, data = {}) => { const m = `data: ${JSON.stringify({ typ
 const emit = (type, data = {}) => emitTo(cur(), type, data);
 setInterval(() => { for (const t of tenants.values()) for (const c of t.clients) c.write(": ping\n\n"); }, 20000).unref();
 // Counter speaker announces "order N is ready" in the customer's language whenever an order completes (from any path).
-const wire = (t) => { t.hooks.ready = (o) => emitTo(t, "ready", { number: o.number, lang: o.lang, text: t.menu.payWhen === "after" ? say(o.lang).readyPay(o.number) : say(o.lang).ready(o.number) }); };
+const wire = (t) => { t.hooks.ready = (o) => emitTo(t, "ready", { number: o.number, lang: o.lang, text: t.menu.payWhen === "after" || o.payLater ? say(o.lang).readyPay(o.number) : say(o.lang).ready(o.number) }); };
 // Run the scheduler and speak each new task on that chef's own device (SSE event addressed by chefId).
 const taskText = (a) => { const t = a.whole ? say(a.lang).newOrder(a.number, a.items.map((i) => lineText(i, true)).join(", ")) : say(a.lang).task(lineText(a.items[0], true), a.number); return a.from ? say(a.lang).transfer(a.from, t) : t; };
 function dispatch() { const out = schedule(); for (const a of out) emit("task", { chefId: a.chefId, number: a.number, lang: a.lang, text: taskText(a) }); emit("update"); return out; }
 const menuView = () => ({ shop: menu.shop, items: menu.items.map((i) => ({ ...i, soldOut: isOut(i.id) })) });
 const profileView = () => ({ id: menu.id, kindLabel: menu.kindLabel, fulfil: menu.fulfil, payWhen: menu.payWhen, table: !!menu.table, words: menu.words, shops: Object.values(profiles).map((p) => ({ id: p.id, label: p.label })) });
 const slipText = (o) => say(KITCHEN_LANG).newOrder(o.number, o.lines.map((l) => lineText(l, true)).join(", "));
-const view = (o) => ({ id: o.id, number: o.number, lines: o.lines, total: o.total, status: o.status, paidAt: o.paidAt, startedAt: o.startedAt, lang: o.lang, table: o.table, method: o.method, source: o.source, pickupAt: o.pickupAt, startAt: o.startAt, caller: o.caller ? "XXXXXX" + String(o.caller).slice(-4) : undefined });
+const view = (o) => ({ id: o.id, number: o.number, lines: o.lines, total: o.total, status: o.status, paidAt: o.paidAt, startedAt: o.startedAt, lang: o.lang, table: o.table, method: o.method, source: o.source, payLater: o.payLater || undefined, pickupAt: o.pickupAt, startAt: o.startAt, caller: o.caller ? "XXXXXX" + String(o.caller).slice(-4) : undefined });
 
 async function app(req, res, url, role) {
   try {
@@ -81,8 +81,8 @@ async function app(req, res, url, role) {
       const o = orders.find((x) => x.id === m[1]); if (!o) return json(res, 404, { error: "no such order" });
       let announce = null;
       if (o.status === "awaiting_payment" && (await verifyPaid(o))) { markPaid(o); dispatch(); emit("order", { order: view(o), text: slipText(o) }); const msg = say(o.lang).paid(o.number, menu.payWhen === "after" ? null : o.pin); announce = { text: msg, audio: await speak(msg, o.lang) }; }
-      else if (o.status === "ready" && !o.paidAt && menu.payWhen === "after" && (await verifyPaid(o))) { settle(o, "upi"); emit("update"); const msg = say(o.lang).paid(o.number); announce = { text: msg, audio: await speak(msg, o.lang) }; }
-      return json(res, 200, { order: view(o), announce, pin: o.paidAt && menu.payWhen !== "after" ? o.pin : null });
+      else if (o.status === "ready" && !o.paidAt && (menu.payWhen === "after" || o.payLater) && (await verifyPaid(o))) { settle(o, "upi"); emit("update"); const msg = say(o.lang).paid(o.number); announce = { text: msg, audio: await speak(msg, o.lang) }; }
+      return json(res, 200, { order: view(o), announce, pin: o.paidAt && menu.payWhen !== "after" && !o.payLater ? o.pin : null });
     }
     if (req.method === "POST" && (m = url.pathname.match(/^\/api\/order\/(ORD\d+)\/mock-pay$/))) {
       if (!isMock()) return json(res, 403, { error: "mock pay disabled" });
@@ -92,7 +92,7 @@ async function app(req, res, url, role) {
     // pay-after shops: bill a finished order at the counter (UPI QR for the final amount, or cash)
     if (req.method === "POST" && (m = url.pathname.match(/^\/api\/order\/(ORD\d+)\/(bill|cash)$/))) {
       const o = orders.find((x) => x.id === m[1]); if (!o) return json(res, 404, { error: "no such order" });
-      if (menu.payWhen !== "after" || o.status !== "ready" || o.paidAt) return json(res, 409, { error: "order is not waiting for payment" });
+      if ((menu.payWhen !== "after" && !o.payLater) || o.status !== "ready" || o.paidAt) return json(res, 409, { error: "order is not waiting for payment" });
       if (m[2] === "cash") { settle(o, "cash"); emit("update"); return json(res, 200, { order: view(o) }); }
       return json(res, 200, { order: view(o), qr: await createQr(o) });
     }

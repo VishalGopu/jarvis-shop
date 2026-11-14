@@ -7,7 +7,7 @@ import { stt, tts, sarvamEnabled } from "./sarvam.js";
 import { Endpointer, pcm8kToWav16k, wavTo8kPcm, parsePickup, fmtClock, PHONE_RATE } from "./telephony.js";
 import { runIn } from "./tenant.js";
 import { allowed, track } from "./usage.js";
-import { menu, priceCart, createOrder, isOut, persist, holdForPickup, cancelOrder } from "./orders.js";
+import { menu, priceCart, createOrder, isOut, persist, holdForPickup, cancelOrder, startWork } from "./orders.js";
 import { payToken } from "./tenants.js";
 import { sendSms } from "./sms.js";
 import { parse, applyToCart } from "./parser.js";
@@ -210,13 +210,14 @@ export async function handlePhoneTool(req, res, hooks) {
         let at = null; const mins = Number(input.pickup_in_minutes);
         if (mins > 0 && mins <= 360) at = Date.now() + mins * 60e3; else if (input.pickup_text) at = parsePickup(String(input.pickup_text));
         if (at == null) return send(200, { ok: false, needs: "pickup_time", message: `I could not use that pickup time. It is ${fmtClock(Date.now())} now, and pickup must be within the next 6 hours, not in the past. Nothing is booked yet. Tell the caller this is not a system problem, then ask for a time from now, for example in twenty minutes or at six thirty.` });
-        const payFirst = menu.payWhen === "before"; let mobile = null;
+        const payFirst = menu.payWhen === "before" && process.env.PHONE_PAY === "link"; let mobile = null;   // parked: PHONE_PAY=link texts a pay link instead of paying at pickup
         if (payFirst) { mobile = toMobile(input.pay_phone) || toMobile(input.caller);
           if (!mobile) return send(200, { ok: false, needs: "phone_number", message: "I could not get a valid mobile number to send the payment link to. Ask the caller to say their 10 digit mobile number, then try again. Nothing is booked yet." }); }
         let order; try { order = createOrder(priced.lines.map((l) => ({ id: l.id, qty: l.qty, note: l.note })), "en-IN"); }
         catch (e) { return send(200, { ok: false, message: `Could not book: ${e.message}. Ask the caller what to change.` }); }
         Object.assign(order, { source: "phone", pickupAt: at, caller: (mobile || String(input.caller || "")).slice(0, 20) || null });
-        if (!payFirst) holdForPickup(order, at); persist();
+        if (!payFirst) { order.payLater = true; if (order.status === "awaiting_payment") startWork(order); holdForPickup(order, at); }   // phone orders are paid at the counter when collected, even in pay-first shops
+        persist();
         if (input.call_id) { booked.set(String(input.call_id), { number: order.number, at: Date.now() }); if (booked.size > 500) booked.delete(booked.keys().next().value); }
         if (payFirst) {   // pay first: the kitchen hears about it once the customer pays through the SMS link
           const link = `${(process.env.PUBLIC_URL || "").replace(/\/$/, "")}/pay/${payToken(tenant.id, order.id)}`;

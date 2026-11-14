@@ -105,7 +105,8 @@ function startPoll() {
 $("role").onclick = goRole;
 let readyOrders = [];
 async function loadReady() { try { const k = await get("/api/kitchen"); readyOrders = k.orders.filter((o) => o.status === "ready");
-  $("pickup").innerHTML = !readyOrders.length ? "" : after() ? `Packed — collect payment:<div>${readyOrders.map((o) => `<button class="ghost" data-bill="${o.id}" style="margin:4px 6px 0 0">#${o.number}${o.source === "phone" ? " 📞" : ""} · ₹${o.total}</button>`).join("")}</div>` : `Ready for pickup: <b style="color:var(--acc)">${readyOrders.map((o) => "#" + o.number).join("  ")}</b>`; } catch {} }
+  $("pickup").innerHTML = !readyOrders.length ? "" : (() => { const owe = readyOrders.filter((o) => after() || o.payLater), plain = readyOrders.filter((o) => !(after() || o.payLater));
+    return (owe.length ? `Ready — collect payment:<div>${owe.map((o) => `<button class="ghost" data-bill="${o.id}" style="margin:4px 6px 0 0">#${o.number}${o.source === "phone" ? " 📞" : ""} · ₹${o.total}</button>`).join("")}</div>` : "") + (plain.length ? `Ready for pickup: <b style="color:var(--acc)">${plain.map((o) => "#" + o.number).join("  ")}</b>` : ""); })(); } catch {} }
 $("pickup").onclick = async (e) => { const id = e.target.closest("[data-bill]")?.dataset.bill; if (!id) return; if (orderId) return; const o = readyOrders.find((x) => x.id === id);
   const r = await post(`/api/order/${id}/bill`, {}); if (r.error) { $("status").textContent = r.error; return; } orderId = id; $("total").textContent = "Bill ₹" + r.order.total + " · #" + r.order.number;
   $("qr").innerHTML = `<img src="${r.qr}" alt="UPI QR"><div class="mut" style="text-align:center">Final bill ₹${r.order.total} — scan to pay</div><div class="row"><button class="ghost" id="cash">💵 Cash received</button>${cfg.mock ? `<button class="ghost" id="sim">Simulate payment (demo)</button>` : ""}<button class="ghost" id="back">Back</button></div>`;
