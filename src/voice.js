@@ -167,6 +167,8 @@ async function priceSpoken(text) {
   const cart = applyToCart([], p), priced = priceCart(cart);
   return { cart, priced, soldOut: names };
 }
+/** True when the caller named more things than we matched (e.g. an item that is not on the menu). */
+const missed = (text, priced) => text.split(/,|\band\b|\baur\b|\bplus\b|और/i).filter((x) => /[a-z\u0900-\u0DFF]{3,}/i.test(x)).length > priced.lines.length;
 const summary = (priced) => `${priced.lines.map((l) => lineText(l, true)).join(", ")}. Total ${priced.total} rupees.`;
 
 export async function handlePhoneTool(req, res, hooks) {
@@ -197,11 +199,11 @@ export async function handlePhoneTool(req, res, hooks) {
         const { priced, soldOut } = await priceSpoken(text);
         const sold = soldOut.length ? ` ${soldOut.join(", ")} ${soldOut.length > 1 ? "are" : "is"} sold out.` : "";
         if (!priced.lines.length) return send(200, { ok: false, message: (soldOut.length ? `Sorry.${sold}` : "I could not match that to anything on the menu.") + " Ask the caller to say it again, or read out the menu." });
-        if (route === "/phone/check") return send(200, { ok: true, lines: priced.lines.map((l) => ({ name: l.name, qty: l.qty, unit: l.unit, amount: l.amount })), total: priced.total, message: summary(priced) + sold });
+        if (route === "/phone/check") return send(200, { ok: true, lines: priced.lines.map((l) => ({ name: l.name, qty: l.qty, unit: l.unit, amount: l.amount })), total: priced.total, message: summary(priced) + sold + (missed(text, priced) ? " Part of what the caller said was not found on the menu, so tell them which item could not be added." : "") });
 
         let at = null; const mins = Number(input.pickup_in_minutes);
         if (mins > 0 && mins <= 360) at = Date.now() + mins * 60e3; else if (input.pickup_text) at = parsePickup(String(input.pickup_text));
-        if (at == null) return send(200, { ok: false, needs: "pickup_time", message: "I need to know when the caller will collect it. Ask them, for example, in twenty minutes or at six thirty. Nothing is booked yet." });
+        if (at == null) return send(200, { ok: false, needs: "pickup_time", message: `I could not use that pickup time. It is ${fmtClock(Date.now())} now, and pickup must be within the next 6 hours, not in the past. Nothing is booked yet. Tell the caller this is not a system problem, then ask for a time from now, for example in twenty minutes or at six thirty.` });
         let order; try { order = createOrder(priced.lines.map((l) => ({ id: l.id, qty: l.qty, note: l.note })), "en-IN"); }
         catch (e) { return send(200, { ok: false, message: `Could not book: ${e.message}. Ask the caller what to change.` }); }
         Object.assign(order, { source: "phone", pickupAt: at, caller: input.caller ? String(input.caller).slice(0, 20) : null }); persist();
