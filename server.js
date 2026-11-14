@@ -15,7 +15,7 @@ import { facts, suggestions, briefing, answerRules, renderSuggestion, noHear, LA
 import { ask, llmProvider } from "./src/llm.js";
 import { parse, applyToCart } from "./src/parser.js";
 import { say, replyLang } from "./src/phrases.js";
-import { attachVoice } from "./src/voice.js";
+import { attachVoice, handlePhoneTool } from "./src/voice.js";
 
 const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css" };
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type, Authorization", "Access-Control-Allow-Methods": "GET,POST,OPTIONS" };
@@ -221,6 +221,7 @@ async function gateway(req, res) {
   try {
     if (p === "/api/health") return json(res, 200, { ok: true, multi: isMulti(), shopsLoaded: tenants.size });
     if (p === "/api/mode") return json(res, 200, { multi: isMulti(), types: Object.values(profiles).map((x) => ({ id: x.id, label: x.label })) });
+    if (p.startsWith("/phone/")) return await handlePhoneTool(req, res, voiceHooks);
     if (!p.startsWith("/api/")) return await serveStatic(res, p);
     let tenant, role = "owner";
     if (isMulti()) {
@@ -261,8 +262,8 @@ const server = http.createServer(gateway);
 server.listen(process.env.PORT || 3000, "0.0.0.0", () => console.log(`Jarvis for Shops on :${process.env.PORT || 3000}  mode=${isMulti() ? "multi-shop" : "single-shop"}  sarvam=${sarvamEnabled()}  parser=${process.env.PARSER || (process.env.LLAMA_URL ? "llama" : process.env.OLLAMA_URL ? "ollama" : "rules")}`));
 // Phone orders: a telephony provider streams each call to /voice?shop=<code>&key=<VOICE_KEY> (see src/voice.js)
 // VOICE_PORT puts the call endpoint on its own port, so a public tunnel can expose just that and not the whole shop API
-const voiceServer = process.env.VOICE_PORT ? http.createServer((q, r) => { r.writeHead(404); r.end(); }).listen(process.env.VOICE_PORT, "0.0.0.0") : server;
-attachVoice(voiceServer, {
+const voiceServer = process.env.VOICE_PORT ? http.createServer((q, r) => (q.url.startsWith("/phone/") ? handlePhoneTool(q, r, voiceHooks) : (r.writeHead(404), r.end()))).listen(process.env.VOICE_PORT, "0.0.0.0") : server;
+const voiceHooks = {
   tenantFor: async (code) => {
     let t;
     if (isMulti()) { const shop = shopByCode(code); if (!shop) return null; t = loadTenant(shop.id, { name: shop.name, profile: shop.profile, plan: shop.plan }); }
@@ -271,7 +272,8 @@ attachVoice(voiceServer, {
     return t;
   },
   onOrder: (t, o) => runIn(t, () => { dispatch(); emit("order", { order: view(o), text: slipText(o) }); }),
-});
+};
+attachVoice(voiceServer, voiceHooks);
 
 // idle shops are flushed and unloaded so memory follows ACTIVE shops, not registered ones
 if (isMulti()) setInterval(() => { const idle = +process.env.TENANT_IDLE_MS || 15 * 60e3; for (const [id, t] of tenants) if (Date.now() - t.lastUsed > idle && t.clients.size === 0) unloadTenant(id); }, 60e3).unref();

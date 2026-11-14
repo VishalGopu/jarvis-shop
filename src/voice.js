@@ -10,7 +10,7 @@ import { allowed, track } from "./usage.js";
 import { menu, priceCart, createOrder, isOut, persist } from "./orders.js";
 import { parse, applyToCart } from "./parser.js";
 import { say } from "./phrases.js";
-import { lineText } from "../public/units.js";
+import { lineText, unitPrice } from "../public/units.js";
 
 const MAX_CALL_MS = 5 * 60e3, IDLE_MS = 30e3, DEFAULT_PICKUP_MIN = 20, CHUNK = 3200;   // 3200 bytes = 200 ms of 8 kHz PCM16
 const safeEq = (a, b) => { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };
@@ -137,4 +137,81 @@ async function handleCall(ws, url, hooks) {
     }
   }, 3000);
   ws.on("close", () => { clearInterval(watchdog); log(`call ended (${Math.round((Date.now() - call.start) / 1000)}s)`); });
+}
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+// HTTP tools for a hosted voice agent (Sarvam Voice Agents "API tool"). The hosted agent runs the conversation; it calls
+// these mid-call so that menu, prices and orders stay on OUR server. Auth: "Authorization: Bearer <VOICE_KEY>". Each call
+// names the shop (shop code) so a single endpoint serves every shop. Stateless: the agent passes the whole order each time.
+//   GET  /phone/menu?shop=CODE
+//   POST /phone/check  {shop, order_text}                                   -> items + total, nothing is booked
+//   POST /phone/book   {shop, order_text, pickup_in_minutes | pickup_text, caller?, call_id?}  -> books a pay-at-pickup order
+// ---------------------------------------------------------------------------------------------------------------------
+const booked = new Map();   // call_id -> { number, at }: a retried tool call must not book the same order twice
+
+function readJson(req, limit = 64 * 1024) {
+  return new Promise((ok, no) => {
+    const c = []; let n = 0;
+    req.on("data", (d) => { n += d.length; if (n > limit) { no(new Error("too large")); req.destroy?.(); } else c.push(d); });
+    req.on("end", () => { try { ok(c.length ? JSON.parse(Buffer.concat(c).toString()) : {}); } catch { no(new Error("bad json")); } });
+    req.on("error", no);
+  });
+}
+
+/** Turns what the caller said into a priced cart using the same parser as the counter. */
+async function priceSpoken(text) {
+  const p = await parse(String(text || ""));
+  const blocked = Object.keys(p.items).filter((id) => isOut(id)), names = blocked.map((id) => menu.items.find((i) => i.id === id)?.name).filter(Boolean);
+  blocked.forEach((id) => delete p.items[id]);
+  const cart = applyToCart([], p), priced = priceCart(cart);
+  return { cart, priced, soldOut: names };
+}
+const summary = (priced) => `${priced.lines.map((l) => lineText(l, true)).join(", ")}. Total ${priced.total} rupees.`;
+
+export async function handlePhoneTool(req, res, hooks) {
+  const send = (code, obj) => { res.writeHead(code, { "Content-Type": "application/json" }); res.end(JSON.stringify(obj)); };
+  const url = new URL(req.url, "http://x"), need = process.env.VOICE_KEY, auth = req.headers.authorization || "";
+  if (!need || !safeEq(auth.startsWith("Bearer ") ? auth.slice(7) : "", need)) return send(401, { ok: false, message: "unauthorized" });
+  let input;
+  try { input = req.method === "POST" ? await readJson(req) : Object.fromEntries(url.searchParams); } catch (e) { return send(400, { ok: false, message: e.message }); }
+  const tenant = await hooks.tenantFor(String(input.shop || ""));
+  if (!tenant) return send(404, { ok: false, message: "I could not find this shop." });
+  const route = url.pathname.replace(/\/+$/, "");
+  try {
+    return await runIn(tenant, async () => {
+      if (menu.payWhen !== "after") return send(200, { ok: false, message: "This shop cannot take phone orders right now. Please ask the caller to visit the counter." });
+      if (route === "/phone/menu") {
+        const items = menu.items.filter((i) => !isOut(i.id));
+        return send(200, { ok: true, shop: menu.shop, items: items.map((i) => ({ name: i.name, price: unitPrice(i), also_called: i.aliases?.slice(0, 4) })),
+          message: `${menu.shop} has: ` + items.map((i) => `${i.name} ${unitPrice(i)}`).join(", ") + "." });
+      }
+      if (route === "/phone/check" || route === "/phone/book") {
+        const text = String(input.order_text || "").trim();
+        if (!text) return send(200, { ok: false, message: "No order text was given. Ask the caller what they would like." });
+        if (route === "/phone/book" && input.call_id && booked.has(String(input.call_id))) {
+          const b = booked.get(String(input.call_id));
+          return send(200, { ok: true, order_number: b.number, message: `Order ${b.number} is already booked.` });
+        }
+        if (!allowed("llm")) return send(200, { ok: false, message: "The shop is very busy right now. Please ask the caller to visit the counter." });
+        const { priced, soldOut } = await priceSpoken(text);
+        const sold = soldOut.length ? ` ${soldOut.join(", ")} ${soldOut.length > 1 ? "are" : "is"} sold out.` : "";
+        if (!priced.lines.length) return send(200, { ok: false, message: (soldOut.length ? `Sorry.${sold}` : "I could not match that to anything on the menu.") + " Ask the caller to say it again, or read out the menu." });
+        if (route === "/phone/check") return send(200, { ok: true, lines: priced.lines.map((l) => ({ name: l.name, qty: l.qty, unit: l.unit, amount: l.amount })), total: priced.total, message: summary(priced) + sold });
+
+        let at = null; const mins = Number(input.pickup_in_minutes);
+        if (mins > 0 && mins <= 360) at = Date.now() + mins * 60e3; else if (input.pickup_text) at = parsePickup(String(input.pickup_text));
+        if (at == null) return send(200, { ok: false, needs: "pickup_time", message: "I need to know when the caller will collect it. Ask them, for example, in twenty minutes or at six thirty. Nothing is booked yet." });
+        let order; try { order = createOrder(priced.lines.map((l) => ({ id: l.id, qty: l.qty, note: l.note })), "en-IN"); }
+        catch (e) { return send(200, { ok: false, message: `Could not book: ${e.message}. Ask the caller what to change.` }); }
+        Object.assign(order, { source: "phone", pickupAt: at, caller: input.caller ? String(input.caller).slice(0, 20) : null }); persist();
+        if (input.call_id) { booked.set(String(input.call_id), { number: order.number, at: Date.now() }); if (booked.size > 500) booked.delete(booked.keys().next().value); }
+        hooks.onOrder?.(tenant, order);
+        log(`order #${order.number} booked by tool for ${fmtClock(at)} (₹${order.total})`);
+        return send(200, { ok: true, order_number: order.number, total: order.total, pickup_time: fmtClock(at),
+          message: `Order number ${order.number} is booked for ${fmtClock(at)}. ${summary(priced)} The caller pays at the counter when they collect it.` });
+      }
+      return send(404, { ok: false, message: "unknown tool" });
+    });
+  } catch (e) { console.warn("[voice] tool failed:", e.message); return send(500, { ok: false, message: "Something went wrong. Please ask the caller to visit the counter." }); }
 }
