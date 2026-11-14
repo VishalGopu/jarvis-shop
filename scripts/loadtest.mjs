@@ -3,10 +3,10 @@
 // pairs devices, opens live (SSE) connections, then every shop runs full order cycles in parallel. Checks data isolation at the end.
 import { spawn, execSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs"; import { tmpdir } from "node:os"; import { join } from "node:path";
-const SHOPS = +process.argv[2] || 200, ORDERS = +process.argv[3] || 20, PORT = 3090 + Math.floor(Math.random() * 500), B = `http://localhost:${PORT}`, DATA = mkdtempSync(join(tmpdir(), "jarvis-load-"));
+const SHOPS = +process.argv[2] || 200, ORDERS = +process.argv[3] || 20, PORT = 3090 + Math.floor(Math.random() * 500), B = `http://localhost:${PORT}`, DATA = mkdtempSync(join(tmpdir(), "chitragupta-load-"));
 const env = { PATH: process.env.PATH, TENANCY: "multi", DATA_DIR: DATA, PORT: String(PORT), PARSER: "rules", ADMIN_KEY: "adm", SIGNUPS_PER_HOUR: "100000", TOKEN_SECRET: "load" };
 const srv = spawn("node", [...(process.env.PROF ? ["--cpu-prof", "--cpu-prof-dir=/tmp/jprof"] : []), "server.js"], { env, stdio: ["ignore", "pipe", "inherit"] });
-await new Promise((ok) => srv.stdout.on("data", (d) => /Jarvis for Shops/.test(String(d)) && ok()));
+await new Promise((ok) => srv.stdout.on("data", (d) => /Chitragupta for Shops/.test(String(d)) && ok()));
 const rss = () => Math.round(+execSync(`ps -o rss= -p ${srv.pid}`).toString().trim() / 1024);
 const lat = {}; let errors = 0, reqs = 0;
 async function call(name, method, path, tok, body) {

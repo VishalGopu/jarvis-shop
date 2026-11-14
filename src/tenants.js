@@ -45,6 +45,13 @@ function key() {
 }
 const b64 = (x) => Buffer.from(x).toString("base64url"), mac = (p) => createHmac("sha256", key()).update(p).digest("base64url");
 export const issue = (shopId, role, days = 30) => { const p = b64(JSON.stringify({ s: shopId, r: role, exp: Date.now() + days * 864e5 })); return p + "." + mac(p); };
+/** Signed, stateless link token for paying one order: no login needed, valid only for that shop + order. */
+export const payToken = (shopId, orderId) => { const p = b64(JSON.stringify({ s: shopId, o: orderId })); return p + "." + mac("pay." + p); };
+export function verifyPayToken(token) {
+  const [p, sig] = String(token || "").split("."); if (!p || !sig) return null;
+  const want = mac("pay." + p); if (sig.length !== want.length || !timingSafeEqual(Buffer.from(sig), Buffer.from(want))) return null;
+  try { const d = JSON.parse(Buffer.from(p, "base64url").toString()); return d.s && d.o ? { shop: d.s, order: d.o } : null; } catch { return null; }
+}
 export function verify(token) {
   const [p, sig] = String(token || "").split("."); if (!p || !sig) return null;
   const want = mac(p); if (sig.length !== want.length || !timingSafeEqual(Buffer.from(sig), Buffer.from(want))) return null;

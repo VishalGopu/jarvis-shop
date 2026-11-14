@@ -1,5 +1,5 @@
 -keepattributes *Annotation*, InnerClasses
 -dontwarn org.slf4j.**
--keep,includedescriptorclasses class com.jarvis.shop.**$$serializer { *; }
--keepclassmembers class com.jarvis.shop.** { *** Companion; }
--keepclasseswithmembers class com.jarvis.shop.** { kotlinx.serialization.KSerializer serializer(...); }
+-keep,includedescriptorclasses class com.chitragupta.shop.**$$serializer { *; }
+-keepclassmembers class com.chitragupta.shop.** { *** Companion; }
+-keepclasseswithmembers class com.chitragupta.shop.** { kotlinx.serialization.KSerializer serializer(...); }

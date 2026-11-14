@@ -1,7 +1,7 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Jarvis Admin</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chitragupta Admin</title>
 <style>:root{--bg:#0b1220;--card:#141c2e;--fg:#e8eefc;--mut:#8b97b5;--acc:#2dd4bf}body{margin:0;background:var(--bg);color:var(--fg);font:16px system-ui,sans-serif;padding:14px;max-width:900px;margin:auto}
 table{width:100%;border-collapse:collapse}td,th{padding:8px 6px;border-bottom:1px solid #26314d;text-align:left}th{color:var(--mut);font-weight:500}.mut{color:var(--mut)}input,button{font:inherit;padding:10px;border-radius:10px;border:0}input{background:#0e1626;color:var(--fg);border:1px solid #26314d}button{background:var(--acc);color:#04201c;font-weight:700}</style></head><body>
-<h1>🛰 Jarvis · all shops</h1><p><input id="k" type="password" placeholder="admin key"> <button id="go">Load</button> <span class="mut" id="m"></span></p>
+<h1>🛰 Chitragupta · all shops</h1><p><input id="k" type="password" placeholder="admin key"> <button id="go">Load</button> <span class="mut" id="m"></span></p>
 <table><thead><tr><th>Shop</th><th>Type</th><th>Orders today</th><th>Revenue today</th><th>Voice calls today</th><th>Total orders</th></tr></thead><tbody id="b"></tbody></table>
 <script type="module">
 import { base } from "/common.js"; const $ = (i) => document.getElementById(i); $("k").value = sessionStorage.getItem("ak") || "";

@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Jarvis for Shops</title>
+<title>Chitragupta for Shops</title>
 <style>
 :root{--bg:#0b1220;--card:#141c2e;--fg:#e8eefc;--mut:#8b97b5;--acc:#2dd4bf;--warn:#fbbf24}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:18px system-ui,sans-serif;min-height:100vh;display:grid;grid-template-columns:1.1fr 1fr;gap:16px;padding:16px}
@@ -13,7 +13,7 @@ table{width:100%;border-collapse:collapse}td{padding:6px 0;border-bottom:1px sol
 #qr img{width:260px;background:#fff;border-radius:12px;display:block;margin:10px auto}.big{font-size:56px;font-weight:800;text-align:center;color:var(--acc)}
 .row{display:flex;gap:8px;margin-top:10px}input{flex:1;font:inherit;padding:12px;border-radius:12px;border:1px solid #26314d;background:#0e1626;color:var(--fg)}
 </style></head><body>
-<div class="card"><h1 id="shop">Jarvis</h1><div class="mut">Speak in any Indian language · hold the button and talk</div>
+<div class="card"><h1 id="shop">Chitragupta</h1><div class="mut">Speak in any Indian language · hold the button and talk</div>
 <div style="text-align:right"><button class="ghost" id="role" style="padding:6px 10px;font-size:13px">↩ role</button> <button class="ghost" id="srv" style="padding:6px 10px;font-size:13px">⚙ server</button></div><div id="face">🤖</div><div id="say">Hi! What would you like to order?</div>
 <button id="talk">🎤 Hold to speak</button>
 <div class="row"><input id="txt" placeholder="…or type (e.g. two dosa and a chai)"><button class="ghost" id="send">Send</button></div>
@@ -28,11 +28,11 @@ import { fmtQty, unitPrice } from "/units.js";
 setServer(false);
 let cfg, cart = [], lang = "en-IN", orderId = null, poll = null, lines = [], total = 0;
 const $ = (id) => document.getElementById(id);
-cfg = { menu: { shop: "Jarvis", items: [] }, mock: true, profile: { payWhen: "before", words: {} } };
+cfg = { menu: { shop: "Chitragupta", items: [] }, mock: true, profile: { payWhen: "before", words: {} } };
 const after = () => cfg.profile?.payWhen === "after", W = () => cfg.profile?.words || {};
 async function loadCfg() {
   try {
-    cfg = await get("/api/config"); $("shop").textContent = cfg.menu.shop + " · Jarvis";
+    cfg = await get("/api/config"); $("shop").textContent = cfg.menu.shop + " · Chitragupta";
     $("menu").innerHTML = cfg.menu.items.map((i) => i.soldOut ? `<button disabled style="opacity:.4">${i.name}<br><span class="mut">Sold out</span></button>` : `<button data-add="${i.id}">${i.name}<br><span class="mut">${unitPrice(i)}${i.stock != null && i.stock <= 3 * (i.step || 1) ? ` · only ${fmtQty(i.stock, i.unit)} left` : ""}</span></button>`).join("");
     $("pay").textContent = after() ? "Send to " + (W().staff || "kitchen").toLowerCase() : "Pay with UPI"; $("tablebox").style.display = cfg.profile?.table ? "" : "none";
     $("txt").placeholder = after() && cfg.profile.fulfil === "pack" ? "…or type (e.g. 1 kg rice, half kg sugar)" : "…or type (e.g. two dosa and a chai)";
@@ -87,7 +87,7 @@ async function checkout() {
   if (orderId || !cart.length) return;
   const r = await post("/api/checkout", { cart, lang, table: $("table").value }); if (r.error) { $("say").textContent = r.error; return; } orderId = r.order.id;
   if (r.payLater) {                                                    // pay-after shop: the slip is with the team; bill when it is packed
-    $("qr").innerHTML = `<div class="big">#${r.order.number}</div><div class="mut" style="text-align:center">${W().station || "Kitchen"}: your slip is being handled. Wait for your number.</div>`; $("status").textContent = "Sent to " + (W().staff || "kitchen").toLowerCase() + " ✔ · total ₹" + r.order.total;
+    $("qr").innerHTML = `<div class="big">#${r.order.number}</div>${r.pin ? `<div class="mut" style="text-align:center">Pickup code</div><div class="big" style="font-size:44px;letter-spacing:8px">${r.pin}</div>` : ""}<div class="mut" style="text-align:center">${W().station || "Kitchen"}: your slip is being handled. Keep your number and code for pickup.</div>`; $("status").textContent = "Sent to " + (W().staff || "kitchen").toLowerCase() + " ✔ · total ₹" + r.order.total;
     cart = []; lines = []; total = 0; orderId = null; render(); loadReady(); setTimeout(() => { if (!orderId) { $("qr").innerHTML = ""; $("status").textContent = ""; } }, 12000); return; }
   $("qr").innerHTML = `<img src="${r.qr}" alt="UPI QR"><div class="mut" style="text-align:center">Scan with Paytm / any UPI app</div>` + `<div class="row"><button class="ghost" id="edit">✏ Edit order</button>${cfg.mock ? `<button class="ghost" id="sim">Simulate payment (demo)</button>` : ""}</div>`;
   $("status").textContent = "Waiting for payment… " + r.order.id;
@@ -105,13 +105,15 @@ function startPoll() {
 $("role").onclick = goRole;
 let readyOrders = [];
 async function loadReady() { try { const k = await get("/api/kitchen"); readyOrders = k.orders.filter((o) => o.status === "ready");
-  $("pickup").innerHTML = !readyOrders.length ? "" : after() ? `Packed — collect payment:<div>${readyOrders.map((o) => `<button class="ghost" data-bill="${o.id}" style="margin:4px 6px 0 0">#${o.number} · ₹${o.total}</button>`).join("")}</div>` : `Ready for pickup: <b style="color:var(--acc)">${readyOrders.map((o) => "#" + o.number).join("  ")}</b>`; } catch {} }
+  $("pickup").innerHTML = !readyOrders.length ? "" : (() => { const owe = readyOrders.filter((o) => after() || o.payLater), plain = readyOrders.filter((o) => !(after() || o.payLater));
+    return (owe.length ? `Ready — collect payment:<div>${owe.map((o) => `<button class="ghost" data-bill="${o.id}" style="margin:4px 6px 0 0">#${o.number}${o.source === "phone" ? " 📞" : ""} · ₹${o.total}</button>`).join("")}</div>` : "") + (plain.length ? `Ready for pickup: <b style="color:var(--acc)">${plain.map((o) => "#" + o.number).join("  ")}</b>` : ""); })(); } catch {} }
 $("pickup").onclick = async (e) => { const id = e.target.closest("[data-bill]")?.dataset.bill; if (!id) return; if (orderId) return; const o = readyOrders.find((x) => x.id === id);
-  const r = await post(`/api/order/${id}/bill`, {}); if (r.error) { $("status").textContent = r.error; return; } orderId = id; $("total").textContent = "Bill ₹" + r.order.total + " · #" + r.order.number;
+  const pin = prompt("Customer's pickup code for #" + o.number + " (Cancel to stop)"); if (pin === null) return;
+  const r = await post(`/api/order/${id}/bill`, { pin }); if (r.error) { $("status").textContent = r.error; return; } orderId = id; $("total").textContent = "Bill ₹" + r.order.total + " · #" + r.order.number;
   $("qr").innerHTML = `<img src="${r.qr}" alt="UPI QR"><div class="mut" style="text-align:center">Final bill ₹${r.order.total} — scan to pay</div><div class="row"><button class="ghost" id="cash">💵 Cash received</button>${cfg.mock ? `<button class="ghost" id="sim">Simulate payment (demo)</button>` : ""}<button class="ghost" id="back">Back</button></div>`;
   $("status").textContent = "Waiting for payment… " + id; if (cfg.mock) $("sim").onclick = () => post(`/api/order/${id}/mock-pay`, {});
   const done = () => { clearInterval(poll); orderId = null; $("qr").innerHTML = ""; $("total").textContent = ""; $("status").textContent = "Paid ✔ #" + r.order.number + " handed over."; loadReady(); };
-  $("cash").onclick = async () => { await post(`/api/order/${id}/cash`, {}); done(); }; $("back").onclick = () => { clearInterval(poll); orderId = null; $("qr").innerHTML = ""; $("total").textContent = ""; $("status").textContent = ""; };
+  $("cash").onclick = async () => { const c = await post(`/api/order/${id}/cash`, { pin }); if (c.error) { $("status").textContent = c.error; return; } done(); }; $("back").onclick = () => { clearInterval(poll); orderId = null; $("qr").innerHTML = ""; $("total").textContent = ""; $("status").textContent = ""; };
   clearInterval(poll); poll = setInterval(async () => { const s = await get(`/api/order/${id}`); if (s.order?.status === "delivered") { if (s.announce) say(s.announce.audio, s.announce.text, lang); done(); } }, 2000); };
 events((e) => { if (e.type === "menu") loadCfg(); if (e.type === "ready") speakText(e.text, e.lang); if (e.type !== "menu") loadReady(); });   // this speaker calls out finished orders
 $("srv").onclick = () => { setServer(true); location.reload(); };

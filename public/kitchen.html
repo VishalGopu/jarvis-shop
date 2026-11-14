@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Jarvis Kitchen</title>
+<title>Chitragupta Kitchen</title>
 <style>
 :root{--bg:#0b1220;--card:#141c2e;--fg:#e8eefc;--mut:#8b97b5;--acc:#2dd4bf;--warn:#fbbf24;--bad:#f87171}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:18px system-ui,sans-serif;padding:14px}
@@ -32,6 +32,7 @@ button.ghost{background:#26314d;color:var(--fg)}button.rec{background:var(--bad)
   <div class="strip" id="chefStrip"></div>
   <div class="chips" id="chips"></div>
   <p><button id="talk">🎤 Hold & say “order 104 ready” / “dosa ready”</button> <span id="heard" class="mut"></span></p>
+  <div id="upcoming"></div>
   <div class="grid" id="list"></div>
 </div>
 
@@ -41,14 +42,15 @@ import { fmtQty, lineText } from "/units.js";
 setServer(false);
 const $ = (id) => document.getElementById(id);
 const ls = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
-let who = ls.get("kwho"), orders = [], chefs = [], mode = "station", menu = [], fulfil = "kitchen", W = {}, payAfter = false;
+let who = ls.get("kwho"), upcoming = [], orders = [], chefs = [], mode = "station", menu = [], fulfil = "kitchen", W = {}, payAfter = false;
 const staff = () => W.staff || "Chef", pack = () => fulfil === "pack";
+const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 const fmt = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
 const note = (t) => ($("note").textContent = t);
 const chefName = (id) => chefs.find((c) => c.id === id)?.name;
 
 async function load() {
-  try { const k = await get("/api/kitchen"); orders = k.orders; chefs = k.chefs; mode = k.mode; fulfil = k.fulfil || "kitchen"; W = k.words || {}; const cfg = await get("/api/config"); menu = cfg.menu.items; payAfter = cfg.profile?.payWhen === "after"; }
+  try { const k = await get("/api/kitchen"); orders = k.orders; upcoming = k.upcoming || []; chefs = k.chefs; mode = k.mode; fulfil = k.fulfil || "kitchen"; W = k.words || {}; const cfg = await get("/api/config"); menu = cfg.menu.items; payAfter = cfg.profile?.payWhen === "after"; }
   catch { note("Can't reach server — tap ⚙ server"); return; }
   render();
 }
@@ -57,7 +59,7 @@ function render() {
   if (who && who !== "board" && !chefs.some((c) => c.id === who)) who = null;
   if (!who) {
     $("title").textContent = "👨‍🍳 Who is using this device?";
-    document.title = "Jarvis " + (W.station || "Kitchen");
+    document.title = "Chitragupta " + (W.station || "Kitchen");
     $("pick").innerHTML = chefs.map((c) => `<button data-who="${c.id}">👨‍🍳 ${c.name}<br><span class="mut">${c.skills.length && !pack() ? "does: " + c.skills.map((s) => menu.find((m) => m.id === s)?.name || s).join(", ") : pack() ? "packs orders" : "any dish"}${c.online ? " · on shift" : ""}</span></button>`).join("")
       + `<button data-who="board">📋 Board (manager view)<br><span class="mut">All orders, out-of-stock, assign by voice</span></button>` + (chefs.length ? "" : `<p class="mut">No ${staff().toLowerCase()}s set up yet. Use Owner → ${W.setup || "Kitchen setup"}, or open the Board.</p>`);
     $("pick").classList.remove("hide"); return;
@@ -109,11 +111,12 @@ function renderBoard() {
   $("chefStrip").innerHTML = chefs.map((c) => `<div class="cf"><b>${c.name}</b> <span class="${c.online ? "on" : "off"}">${c.online ? "● on shift" : "○ off"}</span><br>${c.task ? `${c.task.items.map((i) => lineText(i)).join(", ")} → #${c.task.number} <button class="ghost sm" data-free="${c.id}">free</button>` : `<span class="mut">idle</span>`}${(c.queued || []).length ? `<br><span class="mut">next: ${c.queued.map((q) => "#" + q.number).join(", ")}</span>` : ""}</div>`).join("") || `<div class="mut">Nobody configured (Owner → ${W.setup || "Kitchen setup"}).</div>`;
   $("chips").innerHTML = menu.map((i) => `<span class="chip ${i.soldOut ? "offc" : ""}" data-so="${i.id}" data-v="${i.soldOut ? 0 : 1}">${i.name}${i.soldOut ? " · out" : ""}</span>`).join("");
   $("title").textContent = "📋 " + (W.station || "Kitchen") + " board";
+  $("upcoming").innerHTML = upcoming.length ? `<div class="o" style="margin-bottom:12px"><b>📞 Upcoming phone orders</b> <span class="mut">starts ${upcoming[0].startAt ? "at " + clock(upcoming[0].startAt) : "later"}, reminder spoken then</span>${upcoming.map((o) => `<div class="ln"><span><b>#${o.number}</b> due ${clock(o.pickupAt)} · ${o.lines.map((l) => `${fmtQty(l.qty, l.unit)} × ${l.name}${l.note ? " 📝" + l.note : ""}`).join(", ")}</span><span class="mut">starts ${clock(o.startAt)}</span></div>`).join("")}</div>` : "";
   const first = orders.find((o) => o.status === "cooking");
-  $("list").innerHTML = orders.map((o) => `<div class="o ${o.status} ${o === first ? "first" : ""}"><span class="t ${o.status === "cooking" && Date.now() - (o.startedAt || o.paidAt) > 600000 ? "late" : ""}" data-since="${o.startedAt || o.paidAt}">${fmt(Date.now() - (o.startedAt || o.paidAt))}</span><b>#${o.number}</b>${o.table ? ` <span class="tag">table ${o.table}</span>` : ""}
+  $("list").innerHTML = orders.map((o) => `<div class="o ${o.status} ${o === first ? "first" : ""}">${o.source === "phone" && o.pickupAt ? `<span class="t ${o.status === "cooking" && Date.now() > o.pickupAt ? "late" : ""}">due ${clock(o.pickupAt)}</span>` : `<span class="t ${o.status === "cooking" && Date.now() - (o.startedAt || o.paidAt) > 600000 ? "late" : ""}" data-since="${o.startedAt || o.paidAt}">${fmt(Date.now() - (o.startedAt || o.paidAt))}</span>`}<b>#${o.number}</b>${o.source === "phone" ? ` <span class="tag">📞 phone · pay at pickup</span>` : ""}${o.table ? ` <span class="tag">table ${o.table}</span>` : ""}
     ${o.lines.map((l) => { const done = (l.done || 0) >= l.qty; return `<div class="ln ${done ? "done" : ""}"><span>${fmtQty(l.done || 0, l.unit)}/${fmtQty(l.qty, l.unit)} × ${l.name}${l.note ? ` <b title="note">📝${l.note}</b>` : ""}${l.chefId ? `<span class="tag">${chefName(l.chefId) || ""}</span>` : ""}</span>${o.status === "cooking" && !done ? `<button class="ghost" data-line="${o.number}|${l.id}">✓</button>` : ""}</div>`; }).join("")}
     <div class="mut">${o === first ? "← oldest" : o.status}</div>
-    ${o.status === "cooking" ? `<p><button data-ready="${o.number}">Order ready</button></p>` : `<p>${payAfter && !o.paidAt ? `<span class="mut">₹${o.total} · pay at counter</span> <button class="ghost" data-cash="${o.id}">💵 Cash received</button>` : `<button class="ghost" data-deliver="${o.number}">Picked up ✔</button>`}</p>`}</div>`).join("") || `<p class="mut">No active orders.</p>`;
+    ${o.status === "cooking" ? `<p><button data-ready="${o.number}">Order ready</button></p>` : `<p>${(payAfter || o.payLater) && !o.paidAt ? `<span class="mut">₹${o.total} · pay at counter</span> <button class="ghost" data-cash="${o.id}">💵 Cash received</button>` : `<button class="ghost" data-deliver="${o.number}">Picked up ✔</button>`}</p>`}</div>`).join("") || `<p class="mut">No active orders.</p>`;
 }
 async function send(body) {
   try { const r = await post("/api/ready", body);
@@ -126,7 +129,7 @@ $("boardView").onclick = async (e) => {
   const el = e.target.closest("button, [data-so]"); if (!el) return; const d = el.dataset;
   if (d.line) { const [n, id] = d.line.split("|"); send({ number: +n, lineId: id }); }
   else if (d.ready) send({ number: +d.ready });
-  else if (d.cash) { await post(`/api/order/${d.cash}/cash`, {}); load(); }
+  else if (d.cash) { const o = orders.find((x) => x.id === d.cash); const pin = prompt("Customer's pickup code for #" + (o?.number || "")); if (pin === null) return; const r = await post(`/api/order/${d.cash}/cash`, { pin }); if (r.error) note(r.error); load(); }
   else if (d.deliver) { const pin = prompt("Customer's 4-digit pickup code for #" + d.deliver); if (pin === null) return;
     let r = await post("/api/deliver", { number: +d.deliver, pin }); if (r.error && confirm("Wrong code. Hand over anyway?")) r = await post("/api/deliver", { number: +d.deliver, override: true }); $("heard").textContent = r.delivered ? `#${d.deliver} handed over ✔` : (r.error || "Not delivered"); load(); }
   else if (d.free) { await post(`/api/chefs/${d.free}/free`, {}); load(); }
@@ -146,6 +149,7 @@ setInterval(() => document.querySelectorAll("[data-since]").forEach((e) => (e.te
 events((e) => {
   if (e.type === "task" && e.chefId === who) { beep(); speakText(e.text, e.lang); }         // spoken ONLY on that chef's device
   if (e.type === "order" && who === "board") beep();
+  if (e.type === "upcoming" || e.type === "reminder") { beep(); speakText(e.text, e.lang); }   // phone order booked for later / time to start it: every kitchen device
   load();
 });
 load(); setInterval(load, 15000);

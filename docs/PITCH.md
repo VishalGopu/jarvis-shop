@@ -1,11 +1,11 @@
-# Jarvis for Shops
+# Chitragupta for Shops
 ### Hackathon · Track 1: Merchant Growth AI · with Sarvam AI and Paytm
 
 ---
 
 ## 1. Title
 
-# 🤖 Jarvis for Shops
+# 🤖 Chitragupta for Shops
 **The AI business partner for every small shop, in the owner's own language.**
 
 *Speak the order. Get paid. Know your business.*
@@ -153,4 +153,4 @@ Switching shop type, editing prices and tracking stock takes a few taps. Any oth
 
 ---
 
-*Jarvis for Shops · Track 1: Merchant Growth AI*
+*Chitragupta for Shops · Track 1: Merchant Growth AI*

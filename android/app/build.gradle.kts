@@ -5,17 +5,20 @@ plugins {
 }
 
 android {
-    namespace = "com.jarvis.shop"
+    namespace = "com.chitragupta.shop"
     compileSdk = 37
 
     defaultConfig {
-        // Same id as the old WebView app so this build upgrades it in place.
-        applicationId = "com.jarvis.shop"
+        // New app id after the Chitragupta rebrand: installs next to the old Jarvis build instead of upgrading it.
+        applicationId = "com.chitragupta.shop"
         minSdk = 26
         targetSdk = 36
         versionCode = 2
-        versionName = "2.0.0"
+        versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // The shop server baked into the APK, so users never type it. Override per build: ./gradlew assembleDebug -PserverUrl=https://other.example
+        val serverUrl = providers.gradleProperty("serverUrl").getOrElse("https://shop.golla.in")
+        buildConfigField("String", "DEFAULT_SERVER_URL", "\"$serverUrl\"")
     }
     buildTypes {
         release {
@@ -29,7 +32,7 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
     testOptions { unitTests.isReturnDefaultValues = true }
 }
 

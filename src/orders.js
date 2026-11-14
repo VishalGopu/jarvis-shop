@@ -50,7 +50,7 @@ export function priceCart(rawItems) {
   }
   return { lines, total: lines.reduce((s, l) => s + l.amount, 0) };
 }
-const startWork = (o, at = Date.now()) => { o.status = "cooking"; o.startedAt = at; };
+export const startWork = (o, at = Date.now()) => { o.status = "cooking"; o.startedAt = at; };
 export function createOrder(cart, lang = "en-IN", table = "") {
   const { lines, total } = priceCart(cart);
   if (!lines.length) throw new Error("empty cart");
@@ -73,7 +73,13 @@ export function markPaid(o) {
 export function settle(o, method = "upi") {
   if (o.status !== "ready" || o.paidAt) return null; o.paidAt = Date.now(); o.method = method; o.status = "delivered"; o.deliveredAt = o.paidAt; persist(); return o;
 }
-const live = (st) => ["awaiting_payment", "cooking", "ready"].includes(st);
+const live = (st) => ["awaiting_payment", "scheduled", "cooking", "ready"].includes(st);
+// Phone orders booked well ahead wait as "scheduled" and start cooking PHONE_LEAD_MIN (default 30) minutes before pickup.
+export const phoneLeadMs = () => { const m = Number(process.env.PHONE_LEAD_MIN); return (process.env.PHONE_LEAD_MIN !== undefined && process.env.PHONE_LEAD_MIN !== "" && Number.isFinite(m) && m >= 0 ? m : 30) * 60e3; };
+/** Holds a just-created order until `lead` before its pickup time. Returns false (and changes nothing) when pickup is close enough to start now. */
+export function holdForPickup(o, at, now = Date.now()) { const lead = phoneLeadMs(); if (at - now <= lead) return false; o.status = "scheduled"; o.startedAt = null; o.startAt = at - lead; persist(); return true; }
+/** Moves scheduled orders whose start time has come into the kitchen. Returns them. */
+export function startDue(now = Date.now()) { const due = orders.filter((o) => o.status === "scheduled" && (o.startAt || 0) <= now); due.forEach((o) => { o.status = "cooking"; o.startedAt = now; }); if (due.length) persist(); return due; }
 export function setShop(id) {
   if (!profiles[id]) return { error: "unknown shop type" };
   if (id === menu.id) return { ok: true };
@@ -134,10 +140,17 @@ export function parseKitchen(text) {
 }
 const restock = (o) => o.lines.forEach((l) => { const m = byId[l.id]; if (m?.stock != null && !l.unavailable) m.stock = r2(m.stock + l.qty); });
 // cancel: always while unpaid; in pay-after shops also while the team is still working on it
-export function cancelOrder(id) { const o = orders.find((x) => x.id === id); if (!o || !(o.status === "awaiting_payment" || (menu.payWhen === "after" && o.status === "cooking"))) return null; o.status = "cancelled"; restock(o); persist(); return o; }
-// pay-first shops hand over against the 4-digit code the customer heard when paying (pay-after shops hand over at the counter on payment)
-export const pinOk = (num, pin) => { const o = orders.find((x) => x.number === num); return !o || menu.payWhen === "after" || !o.pin || String(pin || "").trim() === o.pin; };
-export function deliver(num) { const o = orders.find((x) => x.number === num && x.status === "ready"); if (o && (menu.payWhen !== "after" || o.paidAt)) { o.status = "delivered"; o.deliveredAt = Date.now(); persist(); return o; } return null; }
+/** Phone orders that were never paid free their stock after ttl. Returns the cancelled orders. */
+export function expireUnpaidPhone(now = Date.now(), ttl = (Number(process.env.PAY_TTL_MIN) || 15) * 60e3) {
+  const gone = orders.filter((o) => o.source === "phone" && o.status === "awaiting_payment" && now - o.createdAt > ttl);
+  gone.forEach((o) => { o.status = "cancelled"; restock(o); }); if (gone.length) persist(); return gone;
+}
+/** True when this order is paid at the counter at pickup: every order in pay-after shops, and phone orders in any shop. */
+export const owesAtPickup = (o) => menu.payWhen === "after" || !!o.payLater;
+export function cancelOrder(id) { const o = orders.find((x) => x.id === id); if (!o || !(o.status === "awaiting_payment" || (owesAtPickup(o) && (o.status === "cooking" || o.status === "scheduled")))) return null; o.status = "cancelled"; restock(o); persist(); return o; }
+// every order has a 4-digit pickup code the customer is given when ordering; the counter checks it before handing over (or billing, for orders paid at pickup)
+export const pinOk = (num, pin) => { const o = orders.find((x) => x.number === num); return !o || !o.pin || String(pin || "").trim() === o.pin; };
+export function deliver(num) { const o = orders.find((x) => x.number === num && x.status === "ready"); if (o && (!owesAtPickup(o) || o.paidAt)) { o.status = "delivered"; o.deliveredAt = Date.now(); persist(); return o; } return null; }
 // picker cannot find an item: drop it from the bill (only where payment comes after packing)
 export function markUnavailable(number, lineId) {
   if (menu.payWhen !== "after") return { error: "bill already paid" };

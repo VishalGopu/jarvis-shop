@@ -7,13 +7,13 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
-        android:name=".JarvisApp"
+        android:name=".ChitraguptaApp"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
-        android:label="Jarvis for Shops"
+        android:label="Chitragupta for Shops"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Jarvis"
+        android:theme="@style/Theme.Chitragupta"
         android:usesCleartextTraffic="true"
         android:enableOnBackInvokedCallback="true">
         <activity

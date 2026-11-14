@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs"; import { tmpdir } from "node:os"; import { join } from "node:path";
-process.env.DATA_DIR = mkdtempSync(join(tmpdir(), "jarvis-kirana-")); process.env.SHOP = "kirana";
+process.env.DATA_DIR = mkdtempSync(join(tmpdir(), "chitragupta-kirana-")); process.env.SHOP = "kirana";
 const O = await import("../src/orders.js"), K = await import("../src/kitchen.js"), P = await import("../src/parser.js"), I = await import("../src/insights.js");
 const { menu, createOrder, markLine, markUnavailable, settle, deliver, cancelOrder, itemById, setCatalog, setShop, orders } = O;
 assert.equal(menu.id, "kirana"); assert.equal(menu.payWhen, "after"); assert.equal(K.kitchenView().mode, "order");

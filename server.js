@@ -6,15 +6,18 @@ import { wavDuration } from "./src/audio.js";
 import { createQr, verifyPaid, isMock } from "./src/pay.js";
 import { runIn, isMulti, cur } from "./src/tenant.js";
 import { loadState } from "./src/store.js";
-import { createShop, shopByCode, getShop, listShops, publicShop, pinOkFor, issue, verify, can, locked, failed, cleared, signupAllowed, ROLES } from "./src/tenants.js";
+import { verifyPayToken, createShop, shopByCode, getShop, listShops, publicShop, pinOkFor, issue, verify, can, locked, failed, cleared, signupAllowed, ROLES } from "./src/tenants.js";
 import { allowed, track, usageView } from "./src/usage.js";
-import { tenants, loadTenant, unloadTenant, flushAll, orders, menu, profiles, soldOut, isOut, priceCart, createOrder, markPaid, settle, markOrderReady, markLine, markUnavailable, allocateDish, parseKitchen, cancelOrder, deliver, pinOk, setSoldOut, setShop, setCatalog, findDish } from "./src/orders.js";
+import { startDue, phoneLeadMs, holdForPickup, expireUnpaidPhone, tenants, loadTenant, unloadTenant, flushAll, orders, menu, profiles, soldOut, isOut, priceCart, createOrder, markPaid, settle, markOrderReady, markLine, markUnavailable, allocateDish, parseKitchen, cancelOrder, deliver, pinOk, setSoldOut, setShop, setCatalog, findDish } from "./src/orders.js";
 import { lineText, unitPrice } from "./public/units.js";
 import { schedule, completeTask, transferTask, setOnline, freeChef, setKitchen, kitchenView, chefsView } from "./src/kitchen.js";
 import { facts, suggestions, briefing, answerRules, renderSuggestion, noHear, LANG_NAMES } from "./src/insights.js";
 import { ask, llmProvider } from "./src/llm.js";
 import { parse, applyToCart } from "./src/parser.js";
+import { fmtClock } from "./src/telephony.js";
+import { recentSms, smsProvider } from "./src/sms.js";
 import { say, replyLang } from "./src/phrases.js";
+import { attachVoice, handlePhoneTool } from "./src/voice.js";
 
 const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css" };
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type, Authorization", "Access-Control-Allow-Methods": "GET,POST,OPTIONS" };
@@ -29,14 +32,14 @@ const emitTo = (t, type, data = {}) => { const m = `data: ${JSON.stringify({ typ
 const emit = (type, data = {}) => emitTo(cur(), type, data);
 setInterval(() => { for (const t of tenants.values()) for (const c of t.clients) c.write(": ping\n\n"); }, 20000).unref();
 // Counter speaker announces "order N is ready" in the customer's language whenever an order completes (from any path).
-const wire = (t) => { t.hooks.ready = (o) => emitTo(t, "ready", { number: o.number, lang: o.lang, text: t.menu.payWhen === "after" ? say(o.lang).readyPay(o.number) : say(o.lang).ready(o.number) }); };
+const wire = (t) => { t.hooks.ready = (o) => emitTo(t, "ready", { number: o.number, lang: o.lang, text: t.menu.payWhen === "after" || o.payLater ? say(o.lang).readyPay(o.number) : say(o.lang).ready(o.number) }); };
 // Run the scheduler and speak each new task on that chef's own device (SSE event addressed by chefId).
 const taskText = (a) => { const t = a.whole ? say(a.lang).newOrder(a.number, a.items.map((i) => lineText(i, true)).join(", ")) : say(a.lang).task(lineText(a.items[0], true), a.number); return a.from ? say(a.lang).transfer(a.from, t) : t; };
 function dispatch() { const out = schedule(); for (const a of out) emit("task", { chefId: a.chefId, number: a.number, lang: a.lang, text: taskText(a) }); emit("update"); return out; }
 const menuView = () => ({ shop: menu.shop, items: menu.items.map((i) => ({ ...i, soldOut: isOut(i.id) })) });
 const profileView = () => ({ id: menu.id, kindLabel: menu.kindLabel, fulfil: menu.fulfil, payWhen: menu.payWhen, table: !!menu.table, words: menu.words, shops: Object.values(profiles).map((p) => ({ id: p.id, label: p.label })) });
 const slipText = (o) => say(KITCHEN_LANG).newOrder(o.number, o.lines.map((l) => lineText(l, true)).join(", "));
-const view = (o) => ({ id: o.id, number: o.number, lines: o.lines, total: o.total, status: o.status, paidAt: o.paidAt, startedAt: o.startedAt, lang: o.lang, table: o.table, method: o.method });
+const view = (o) => ({ id: o.id, number: o.number, lines: o.lines, total: o.total, status: o.status, paidAt: o.paidAt, startedAt: o.startedAt, lang: o.lang, table: o.table, method: o.method, source: o.source, payLater: o.payLater || undefined, pickupAt: o.pickupAt, startAt: o.startAt, caller: o.caller ? "XXXXXX" + String(o.caller).slice(-4) : undefined });
 
 async function app(req, res, url, role) {
   try {
@@ -69,7 +72,7 @@ async function app(req, res, url, role) {
     if (req.method === "POST" && url.pathname === "/api/checkout") {
       const { cart, lang, table } = JSON.parse((await body(req)).toString());
       let o; try { o = createOrder(cart, replyLang(lang), table); } catch (e) { return json(res, 409, { error: e.message }); }
-      if (menu.payWhen === "after") { dispatch(); emit("order", { order: view(o), text: slipText(o) }); return json(res, 200, { order: view(o), qr: null, payLater: true }); }   // slip goes straight to the team; billed when packed
+      if (menu.payWhen === "after") { dispatch(); emit("order", { order: view(o), text: slipText(o) }); return json(res, 200, { order: view(o), qr: null, payLater: true, pin: o.pin }); }   // slip goes straight to the team; billed when packed
       return json(res, 200, { order: view(o), qr: await createQr(o) });
     }
 
@@ -78,8 +81,8 @@ async function app(req, res, url, role) {
       const o = orders.find((x) => x.id === m[1]); if (!o) return json(res, 404, { error: "no such order" });
       let announce = null;
       if (o.status === "awaiting_payment" && (await verifyPaid(o))) { markPaid(o); dispatch(); emit("order", { order: view(o), text: slipText(o) }); const msg = say(o.lang).paid(o.number, menu.payWhen === "after" ? null : o.pin); announce = { text: msg, audio: await speak(msg, o.lang) }; }
-      else if (o.status === "ready" && !o.paidAt && menu.payWhen === "after" && (await verifyPaid(o))) { settle(o, "upi"); emit("update"); const msg = say(o.lang).paid(o.number); announce = { text: msg, audio: await speak(msg, o.lang) }; }
-      return json(res, 200, { order: view(o), announce, pin: o.paidAt && menu.payWhen !== "after" ? o.pin : null });
+      else if (o.status === "ready" && !o.paidAt && (menu.payWhen === "after" || o.payLater) && (await verifyPaid(o))) { settle(o, "upi"); emit("update"); const msg = say(o.lang).paid(o.number); announce = { text: msg, audio: await speak(msg, o.lang) }; }
+      return json(res, 200, { order: view(o), announce, pin: o.paidAt && menu.payWhen !== "after" && !o.payLater ? o.pin : null });
     }
     if (req.method === "POST" && (m = url.pathname.match(/^\/api\/order\/(ORD\d+)\/mock-pay$/))) {
       if (!isMock()) return json(res, 403, { error: "mock pay disabled" });
@@ -89,7 +92,9 @@ async function app(req, res, url, role) {
     // pay-after shops: bill a finished order at the counter (UPI QR for the final amount, or cash)
     if (req.method === "POST" && (m = url.pathname.match(/^\/api\/order\/(ORD\d+)\/(bill|cash)$/))) {
       const o = orders.find((x) => x.id === m[1]); if (!o) return json(res, 404, { error: "no such order" });
-      if (menu.payWhen !== "after" || o.status !== "ready" || o.paidAt) return json(res, 409, { error: "order is not waiting for payment" });
+      const bb = JSON.parse((await body(req)).toString() || "{}");
+      if (!bb.override && !pinOk(o.number, bb.pin)) return json(res, 403, { error: "wrong pickup code" });          // the customer shows their code before paying and collecting
+      if ((menu.payWhen !== "after" && !o.payLater) || o.status !== "ready" || o.paidAt) return json(res, 409, { error: "order is not waiting for payment" });
       if (m[2] === "cash") { settle(o, "cash"); emit("update"); return json(res, 200, { order: view(o) }); }
       return json(res, 200, { order: view(o), qr: await createQr(o) });
     }
@@ -101,7 +106,7 @@ async function app(req, res, url, role) {
     if (req.method === "POST" && url.pathname === "/api/shop") { const r = setShop(JSON.parse((await body(req)).toString()).profile); if (r.error) return json(res, 409, r); dispatch(); emit("menu"); return json(res, 200, { profile: profileView(), menu: menuView() }); }
     if (req.method === "POST" && url.pathname === "/api/catalog") { const r = setCatalog(JSON.parse((await body(req)).toString()).items); if (r.error) return json(res, 400, r); emit("menu"); return json(res, 200, { menu: menuView() }); }
 
-    if (req.method === "GET" && url.pathname === "/api/kitchen") return json(res, 200, { orders: orders.filter((o) => ["cooking", "ready"].includes(o.status)).sort((a, b) => (a.startedAt || a.paidAt) - (b.startedAt || b.paidAt)).map(view), ...kitchenView() });
+    if (req.method === "GET" && url.pathname === "/api/kitchen") return json(res, 200, { orders: orders.filter((o) => ["cooking", "ready"].includes(o.status)).sort((a, b) => (a.startedAt || a.paidAt) - (b.startedAt || b.paidAt)).map(view), upcoming: orders.filter((o) => o.status === "scheduled").sort((a, b) => a.pickupAt - b.pickupAt).map(view), ...kitchenView() });
 
     // Chef marks things ready: tap (number [+ lineId]) or voice ("order 104 ready", "dosa ready", "5 dosa ready").
     // Dishes are allocated FIFO to the oldest PAID orders; an order is announced (in its customer's language) once ALL its items are done.
@@ -169,7 +174,7 @@ async function app(req, res, url, role) {
         const s1 = Date.now();
         try {
           const { hourly, ...week } = f.week; const compact = { today: f.today, yesterday: f.yesterday, last7days: { ...week, busiestHourFrom24: f.week.peakHour }, tomorrowPrepSuggestion: f.tomorrow, slowestHour: f.waitPeak, soldOut: f.soldOut, ordersBeingCookedNow: f.cooking, stockLeft: f.stock };
-          answer = await ask(`You are Jarvis, the trusted business partner of the owner of "${f.shop}", a small ${f.kind || "shop"} in India. Answer the owner's question using ONLY the FACTS below (amounts are in rupees; hours use a 24-hour clock). Speak like a helpful friend: 1-3 short sentences, plain words, no markdown, no lists, no emojis. Never invent numbers. If the FACTS do not contain the answer, say you do not have that information yet. You may add one practical suggestion that follows from the FACTS. Reply in ${LANG_NAMES[lang]}.\nFACTS: ${JSON.stringify(compact)}`, q);
+          answer = await ask(`You are Chitragupta, the trusted business partner of the owner of "${f.shop}", a small ${f.kind || "shop"} in India. Answer the owner's question using ONLY the FACTS below (amounts are in rupees; hours use a 24-hour clock). Speak like a helpful friend: 1-3 short sentences, plain words, no markdown, no lists, no emojis. Never invent numbers. If the FACTS do not contain the answer, say you do not have that information yet. You may add one practical suggestion that follows from the FACTS. Reply in ${LANG_NAMES[lang]}.\nFACTS: ${JSON.stringify(compact)}`, q);
           if (answer) source = "llm";
         } catch (e) { console.warn("copilot LLM failed:", e.message); answer = null; }
         t.llm = Date.now() - s1;
@@ -193,7 +198,8 @@ async function app(req, res, url, role) {
     }
 
     // owner: this shop's code (to pair more devices), plan limits and today's usage
-    if (url.pathname === "/api/shop-info") { const meta = isMulti() ? getShop(cur().id) : null; return json(res, 200, { name: menu.shop, code: meta?.code || null, multi: isMulti(), usage: usageView(cur()) }); }
+    if (url.pathname === "/api/phone/sms") return json(res, 200, { provider: smsProvider(), messages: recentSms(menu.shop) });
+    if (url.pathname === "/api/shop-info") { const meta = isMulti() ? getShop(cur().id) : null; return json(res, 200, { name: menu.shop, code: meta?.code || null, multi: isMulti(), phone: phoneInfo(meta?.code), usage: usageView(cur()) }); }
     return json(res, 404, { error: "not found" });
   } catch (e) {
     if (e.invalidAudio) return json(res, 400, { error: e.message });
@@ -214,12 +220,47 @@ async function serveStatic(res, pathname) {
 const clientIp = (req) => (process.env.TRUST_PROXY ? String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() : "") || req.socket.remoteAddress || "?";
 const summary = (id) => { const t = tenants.get(id), st = t || loadState(id) || {}, d0 = new Date().setHours(0, 0, 0, 0), list = (t ? t.orders : st.orders) || [], today = list.filter((o) => (o.paidAt || o.createdAt) >= d0 && o.status !== "cancelled");
   return { ordersToday: today.length, revenueToday: today.filter((o) => o.paidAt).reduce((s, o) => s + o.total, 0), ordersTotal: list.length, usage: (t ? t.usage : st.usage) || {}, loaded: !!t }; };
+// ---- pay link (opened from the SMS): no login, the signed token names the shop and the order. PAYMENT_MODE=mock shows a simulated Paytm checkout.
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const payPage = (res, code, inner) => { res.writeHead(code, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer" });
+  res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pay for your order</title><style>
+:root{color-scheme:light dark}body{margin:0;font:18px system-ui,sans-serif;background:#f3f6fb;color:#0b1b3a;display:flex;justify-content:center;padding:18px}@media(prefers-color-scheme:dark){body{background:#0b1220;color:#e8eefc}.card{background:#141c2e!important}}
+.card{background:#fff;border-radius:20px;padding:22px;max-width:420px;width:100%;box-shadow:0 6px 24px #0002}h1{font-size:22px;margin:0 0 4px}.mut{opacity:.7;font-size:15px}.row{display:flex;justify-content:space-between;margin:8px 0}.tot{font-size:30px;font-weight:800;margin:14px 0}
+button{width:100%;font:inherit;font-weight:700;border:0;border-radius:14px;padding:16px;background:#00baf2;color:#012b72;margin-top:10px;cursor:pointer}button[disabled]{opacity:.6}.ok{color:#16a34a;font-size:48px;text-align:center}.demo{background:#fff7e0;color:#7a5b00;border-radius:10px;padding:8px 10px;font-size:14px;margin-top:14px}</style></head><body><div class="card">${inner}</div></body></html>`); };
+async function payRoute(req, res, p) {
+  const m = p.match(/^\/pay\/([^/]+)(\/confirm)?$/), tok = m && verifyPayToken(m[1]);
+  if (!tok) return payPage(res, 404, "<h1>Link not valid</h1><p class='mut'>This payment link is not valid. Ask the shop for a new one.</p>");
+  let t; if (isMulti()) { const meta = getShop(tok.shop); if (!meta) return payPage(res, 404, "<h1>Shop not found</h1>"); t = loadTenant(meta.id, { name: meta.name, profile: meta.profile, plan: meta.plan }); } else t = loadTenant("default");
+  if (!t.hooks.ready) wire(t);
+  return await runIn(t, async () => {
+    const o = orders.find((x) => x.id === tok.order); if (!o) return payPage(res, 404, "<h1>Order not found</h1>");
+    const items = o.lines.map((l) => `<div class="row"><span>${esc(lineText(l, true))}</span><span>₹${l.amount}</span></div>`).join(""), when = o.pickupAt ? fmtClock(o.pickupAt) : "";
+    const done = `<div class="ok">✔</div><h1 style="text-align:center">Payment received</h1><p style="text-align:center">Order <b>#${o.number}</b>${when ? ` · pickup <b>${esc(when)}</b>` : ""}</p><p class="mut" style="text-align:center">Show this code at ${esc(menu.shop)}: <b style="font-size:26px;letter-spacing:4px">${esc(o.pin)}</b></p>`;
+    if (m[2]) {                                                                            // POST /pay/<token>/confirm
+      if (req.method !== "POST") return json(res, 405, { error: "use POST" });
+      if (o.status !== "awaiting_payment") return json(res, 200, { ok: o.status !== "cancelled", status: o.status, number: o.number });
+      if (!isMock()) return json(res, 501, { ok: false, error: "Paytm checkout is not wired for links yet" });
+      o.mockPaid = true;
+      if (!(await verifyPaid(o))) return json(res, 402, { ok: false, error: "payment not confirmed" });
+      markPaid(o); if (o.source === "phone" && o.pickupAt) holdForPickup(o, o.pickupAt);
+      await voiceHooks.onOrder(t, o);                                                      // tells the kitchen now, or schedules it if pickup is later
+      return json(res, 200, { ok: true, status: o.status, number: o.number, pin: o.pin });
+    }
+    if (o.status === "cancelled") return payPage(res, 410, "<h1>Link expired</h1><p class='mut'>This order was not paid in time and was cancelled. Please call the shop again.</p>");
+    if (o.status !== "awaiting_payment") return payPage(res, 200, done);
+    return payPage(res, 200, `<h1>${esc(menu.shop)}</h1><p class="mut">Order #${o.number}${when ? ` · pickup ${esc(when)}` : ""}</p>${items}<div class="tot">₹${o.total}</div>
+<button id="pay">Pay ₹${o.total} with Paytm</button><p class="mut" id="msg"></p><div class="demo">Demo checkout: this simulates Paytm. No money is charged.</div>
+<script>document.getElementById("pay").onclick=async function(){this.disabled=true;document.getElementById("msg").textContent="Processing…";try{const r=await fetch(location.pathname+"/confirm",{method:"POST"});const j=await r.json();if(j.ok){document.querySelector(".card").innerHTML=${JSON.stringify(done)}}else{document.getElementById("msg").textContent=j.error||"Payment failed";this.disabled=false}}catch(e){document.getElementById("msg").textContent="Network problem, try again";this.disabled=false}}</script>`);
+  });
+}
 async function gateway(req, res) {
   const url = new URL(req.url, "http://x"), p = url.pathname;
   if (req.method === "OPTIONS") { res.writeHead(204, { ...CORS, ...(req.headers["access-control-request-private-network"] === "true" ? { "Access-Control-Allow-Private-Network": "true" } : {}) }); return res.end(); }
   try {
     if (p === "/api/health") return json(res, 200, { ok: true, multi: isMulti(), shopsLoaded: tenants.size });
     if (p === "/api/mode") return json(res, 200, { multi: isMulti(), types: Object.values(profiles).map((x) => ({ id: x.id, label: x.label })) });
+    if (p.startsWith("/phone/")) return await handlePhoneTool(req, res, voiceHooks);
+    if (p.startsWith("/pay/")) return await payRoute(req, res, p);
     if (!p.startsWith("/api/")) return await serveStatic(res, p);
     let tenant, role = "owner";
     if (isMulti()) {
@@ -256,10 +297,36 @@ async function gateway(req, res) {
     console.error(e); if (!res.headersSent) json(res, 500, { error: e.message });
   }
 }
-http.createServer(gateway).listen(process.env.PORT || 3000, "0.0.0.0", () => console.log(`Jarvis for Shops on :${process.env.PORT || 3000}  mode=${isMulti() ? "multi-shop" : "single-shop"}  sarvam=${sarvamEnabled()}  parser=${process.env.PARSER || (process.env.LLAMA_URL ? "llama" : process.env.OLLAMA_URL ? "ollama" : "rules")}`));
+const server = http.createServer(gateway);
+server.listen(process.env.PORT || 3000, "0.0.0.0", () => console.log(`Chitragupta for Shops on :${process.env.PORT || 3000}  mode=${isMulti() ? "multi-shop" : "single-shop"}  sarvam=${sarvamEnabled()}  parser=${process.env.PARSER || (process.env.LLAMA_URL ? "llama" : process.env.OLLAMA_URL ? "ollama" : "rules")}`));
+// Phone orders: a telephony provider streams each call to /voice?shop=<code>&key=<VOICE_KEY> (see src/voice.js)
+// VOICE_PORT puts the call endpoint on its own port, so a public tunnel can expose just that and not the whole shop API
+const voiceServer = process.env.VOICE_PORT ? http.createServer((q, r) => (q.url.startsWith("/phone/") ? handlePhoneTool(q, r, voiceHooks) : (r.writeHead(404), r.end()))).listen(process.env.VOICE_PORT, "0.0.0.0") : server;
+// Phone orders are tied to the shop codes in VOICE_SHOPS (comma separated). Empty = any shop (single-shop installs).
+const phoneShopOk = (code) => { const list = (process.env.VOICE_SHOPS || "").split(",").map((s) => s.trim().toUpperCase()).filter(Boolean); return !list.length || list.includes(String(code || "").toUpperCase()); };
+const phoneInfo = (code) => { const n = String(process.env.PHONE_AGENT_NUMBER || "").replace(/\D/g, ""); if (!n || !process.env.VOICE_KEY || (isMulti() && !phoneShopOk(code))) return null;
+  return { number: n, on: `**61*${n}**15#`, busy: `**67*${n}#`, unreachable: `**62*${n}#`, off: "##61#" }; };
+const voiceHooks = {
+  tenantFor: async (code) => {
+    let t;
+    if (isMulti()) { if (!phoneShopOk(code)) return null; const shop = shopByCode(code); if (!shop) return null; t = loadTenant(shop.id, { name: shop.name, profile: shop.profile, plan: shop.plan }); }
+    else t = loadTenant("default");
+    if (!t.hooks.ready) wire(t);
+    return t;
+  },
+  onOrder: (t, o) => runIn(t, () => {
+    if (o.status === "scheduled") { emit("upcoming", { order: view(o), lang: KITCHEN_LANG, text: say(KITCHEN_LANG).phoneAhead(o.number, fmtClock(o.pickupAt), o.lines.map((l) => lineText(l, true)).join(", "), Math.round(phoneLeadMs() / 60e3)) }); emit("update"); return; }   // booked well ahead: tell the kitchen now, start it later
+    dispatch(); emit("order", { order: view(o), text: slipText(o) });
+  }),
+};
+attachVoice(voiceServer, voiceHooks);
 
 // idle shops are flushed and unloaded so memory follows ACTIVE shops, not registered ones
-if (isMulti()) setInterval(() => { const idle = +process.env.TENANT_IDLE_MS || 15 * 60e3; for (const [id, t] of tenants) if (Date.now() - t.lastUsed > idle && t.clients.size === 0) unloadTenant(id); }, 60e3).unref();
+if (isMulti()) setInterval(() => { const idle = +process.env.TENANT_IDLE_MS || 15 * 60e3; for (const [id, t] of tenants) if (Date.now() - t.lastUsed > idle && t.clients.size === 0 && !runIn(t, () => orders.some((o) => o.status === "scheduled"))) unloadTenant(id); }, 60e3).unref();   // a shop with phone orders waiting stays loaded so they start on time
+// Start scheduled phone orders when their time comes: put them in the kitchen and remind everyone.
+setInterval(() => { for (const t of tenants.values()) runIn(t, () => { if (expireUnpaidPhone().length) emit("update"); const due = startDue(); if (!due.length) return; for (const o of due) emit("reminder", { order: view(o), lang: KITCHEN_LANG, text: say(KITCHEN_LANG).phoneRemind(o.number, fmtClock(o.pickupAt)) }); dispatch(); }); }, 15000).unref();
+// load the shops that take phone orders at boot, so orders scheduled before a restart still start on time
+(async () => { if (!process.env.VOICE_KEY) return; if (!isMulti()) return void voiceHooks.tenantFor(""); for (const s of listShops()) if (phoneShopOk(s.code)) await voiceHooks.tenantFor(s.code); })().catch((e) => console.error("phone shop preload failed:", e.message));
 
 function pricedView(cart) { const p = priceCart(cart); return { lines: p.lines, total: p.total }; }
 
