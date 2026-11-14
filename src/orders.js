@@ -73,7 +73,13 @@ export function markPaid(o) {
 export function settle(o, method = "upi") {
   if (o.status !== "ready" || o.paidAt) return null; o.paidAt = Date.now(); o.method = method; o.status = "delivered"; o.deliveredAt = o.paidAt; persist(); return o;
 }
-const live = (st) => ["awaiting_payment", "cooking", "ready"].includes(st);
+const live = (st) => ["awaiting_payment", "scheduled", "cooking", "ready"].includes(st);
+// Phone orders booked well ahead wait as "scheduled" and start cooking PHONE_LEAD_MIN (default 30) minutes before pickup.
+export const phoneLeadMs = () => { const m = Number(process.env.PHONE_LEAD_MIN); return (process.env.PHONE_LEAD_MIN !== undefined && process.env.PHONE_LEAD_MIN !== "" && Number.isFinite(m) && m >= 0 ? m : 30) * 60e3; };
+/** Holds a just-created order until `lead` before its pickup time. Returns false (and changes nothing) when pickup is close enough to start now. */
+export function holdForPickup(o, at, now = Date.now()) { const lead = phoneLeadMs(); if (at - now <= lead) return false; o.status = "scheduled"; o.startedAt = null; o.startAt = at - lead; persist(); return true; }
+/** Moves scheduled orders whose start time has come into the kitchen. Returns them. */
+export function startDue(now = Date.now()) { const due = orders.filter((o) => o.status === "scheduled" && (o.startAt || 0) <= now); due.forEach((o) => { o.status = "cooking"; o.startedAt = now; }); if (due.length) persist(); return due; }
 export function setShop(id) {
   if (!profiles[id]) return { error: "unknown shop type" };
   if (id === menu.id) return { ok: true };
@@ -134,7 +140,7 @@ export function parseKitchen(text) {
 }
 const restock = (o) => o.lines.forEach((l) => { const m = byId[l.id]; if (m?.stock != null && !l.unavailable) m.stock = r2(m.stock + l.qty); });
 // cancel: always while unpaid; in pay-after shops also while the team is still working on it
-export function cancelOrder(id) { const o = orders.find((x) => x.id === id); if (!o || !(o.status === "awaiting_payment" || (menu.payWhen === "after" && o.status === "cooking"))) return null; o.status = "cancelled"; restock(o); persist(); return o; }
+export function cancelOrder(id) { const o = orders.find((x) => x.id === id); if (!o || !(o.status === "awaiting_payment" || (menu.payWhen === "after" && (o.status === "cooking" || o.status === "scheduled")))) return null; o.status = "cancelled"; restock(o); persist(); return o; }
 // pay-first shops hand over against the 4-digit code the customer heard when paying (pay-after shops hand over at the counter on payment)
 export const pinOk = (num, pin) => { const o = orders.find((x) => x.number === num); return !o || menu.payWhen === "after" || !o.pin || String(pin || "").trim() === o.pin; };
 export function deliver(num) { const o = orders.find((x) => x.number === num && x.status === "ready"); if (o && (menu.payWhen !== "after" || o.paidAt)) { o.status = "delivered"; o.deliveredAt = Date.now(); persist(); return o; } return null; }

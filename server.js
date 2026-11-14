@@ -8,12 +8,13 @@ import { runIn, isMulti, cur } from "./src/tenant.js";
 import { loadState } from "./src/store.js";
 import { createShop, shopByCode, getShop, listShops, publicShop, pinOkFor, issue, verify, can, locked, failed, cleared, signupAllowed, ROLES } from "./src/tenants.js";
 import { allowed, track, usageView } from "./src/usage.js";
-import { tenants, loadTenant, unloadTenant, flushAll, orders, menu, profiles, soldOut, isOut, priceCart, createOrder, markPaid, settle, markOrderReady, markLine, markUnavailable, allocateDish, parseKitchen, cancelOrder, deliver, pinOk, setSoldOut, setShop, setCatalog, findDish } from "./src/orders.js";
+import { startDue, phoneLeadMs, tenants, loadTenant, unloadTenant, flushAll, orders, menu, profiles, soldOut, isOut, priceCart, createOrder, markPaid, settle, markOrderReady, markLine, markUnavailable, allocateDish, parseKitchen, cancelOrder, deliver, pinOk, setSoldOut, setShop, setCatalog, findDish } from "./src/orders.js";
 import { lineText, unitPrice } from "./public/units.js";
 import { schedule, completeTask, transferTask, setOnline, freeChef, setKitchen, kitchenView, chefsView } from "./src/kitchen.js";
 import { facts, suggestions, briefing, answerRules, renderSuggestion, noHear, LANG_NAMES } from "./src/insights.js";
 import { ask, llmProvider } from "./src/llm.js";
 import { parse, applyToCart } from "./src/parser.js";
+import { fmtClock } from "./src/telephony.js";
 import { say, replyLang } from "./src/phrases.js";
 import { attachVoice, handlePhoneTool } from "./src/voice.js";
 
@@ -37,7 +38,7 @@ function dispatch() { const out = schedule(); for (const a of out) emit("task", 
 const menuView = () => ({ shop: menu.shop, items: menu.items.map((i) => ({ ...i, soldOut: isOut(i.id) })) });
 const profileView = () => ({ id: menu.id, kindLabel: menu.kindLabel, fulfil: menu.fulfil, payWhen: menu.payWhen, table: !!menu.table, words: menu.words, shops: Object.values(profiles).map((p) => ({ id: p.id, label: p.label })) });
 const slipText = (o) => say(KITCHEN_LANG).newOrder(o.number, o.lines.map((l) => lineText(l, true)).join(", "));
-const view = (o) => ({ id: o.id, number: o.number, lines: o.lines, total: o.total, status: o.status, paidAt: o.paidAt, startedAt: o.startedAt, lang: o.lang, table: o.table, method: o.method, source: o.source, pickupAt: o.pickupAt, caller: o.caller ? "XXXXXX" + String(o.caller).slice(-4) : undefined });
+const view = (o) => ({ id: o.id, number: o.number, lines: o.lines, total: o.total, status: o.status, paidAt: o.paidAt, startedAt: o.startedAt, lang: o.lang, table: o.table, method: o.method, source: o.source, pickupAt: o.pickupAt, startAt: o.startAt, caller: o.caller ? "XXXXXX" + String(o.caller).slice(-4) : undefined });
 
 async function app(req, res, url, role) {
   try {
@@ -102,7 +103,7 @@ async function app(req, res, url, role) {
     if (req.method === "POST" && url.pathname === "/api/shop") { const r = setShop(JSON.parse((await body(req)).toString()).profile); if (r.error) return json(res, 409, r); dispatch(); emit("menu"); return json(res, 200, { profile: profileView(), menu: menuView() }); }
     if (req.method === "POST" && url.pathname === "/api/catalog") { const r = setCatalog(JSON.parse((await body(req)).toString()).items); if (r.error) return json(res, 400, r); emit("menu"); return json(res, 200, { menu: menuView() }); }
 
-    if (req.method === "GET" && url.pathname === "/api/kitchen") return json(res, 200, { orders: orders.filter((o) => ["cooking", "ready"].includes(o.status)).sort((a, b) => (a.startedAt || a.paidAt) - (b.startedAt || b.paidAt)).map(view), ...kitchenView() });
+    if (req.method === "GET" && url.pathname === "/api/kitchen") return json(res, 200, { orders: orders.filter((o) => ["cooking", "ready"].includes(o.status)).sort((a, b) => (a.startedAt || a.paidAt) - (b.startedAt || b.paidAt)).map(view), upcoming: orders.filter((o) => o.status === "scheduled").sort((a, b) => a.pickupAt - b.pickupAt).map(view), ...kitchenView() });
 
     // Chef marks things ready: tap (number [+ lineId]) or voice ("order 104 ready", "dosa ready", "5 dosa ready").
     // Dishes are allocated FIFO to the oldest PAID orders; an order is announced (in its customer's language) once ALL its items are done.
@@ -275,12 +276,19 @@ const voiceHooks = {
     if (!t.hooks.ready) wire(t);
     return t;
   },
-  onOrder: (t, o) => runIn(t, () => { dispatch(); emit("order", { order: view(o), text: slipText(o) }); }),
+  onOrder: (t, o) => runIn(t, () => {
+    if (o.status === "scheduled") { emit("upcoming", { order: view(o), lang: KITCHEN_LANG, text: say(KITCHEN_LANG).phoneAhead(o.number, fmtClock(o.pickupAt), o.lines.map((l) => lineText(l, true)).join(", "), Math.round(phoneLeadMs() / 60e3)) }); emit("update"); return; }   // booked well ahead: tell the kitchen now, start it later
+    dispatch(); emit("order", { order: view(o), text: slipText(o) });
+  }),
 };
 attachVoice(voiceServer, voiceHooks);
 
 // idle shops are flushed and unloaded so memory follows ACTIVE shops, not registered ones
-if (isMulti()) setInterval(() => { const idle = +process.env.TENANT_IDLE_MS || 15 * 60e3; for (const [id, t] of tenants) if (Date.now() - t.lastUsed > idle && t.clients.size === 0) unloadTenant(id); }, 60e3).unref();
+if (isMulti()) setInterval(() => { const idle = +process.env.TENANT_IDLE_MS || 15 * 60e3; for (const [id, t] of tenants) if (Date.now() - t.lastUsed > idle && t.clients.size === 0 && !runIn(t, () => orders.some((o) => o.status === "scheduled"))) unloadTenant(id); }, 60e3).unref();   // a shop with phone orders waiting stays loaded so they start on time
+// Start scheduled phone orders when their time comes: put them in the kitchen and remind everyone.
+setInterval(() => { for (const t of tenants.values()) runIn(t, () => { const due = startDue(); if (!due.length) return; for (const o of due) emit("reminder", { order: view(o), lang: KITCHEN_LANG, text: say(KITCHEN_LANG).phoneRemind(o.number, fmtClock(o.pickupAt)) }); dispatch(); }); }, 15000).unref();
+// load the shops that take phone orders at boot, so orders scheduled before a restart still start on time
+(async () => { if (!process.env.VOICE_KEY) return; if (!isMulti()) return void voiceHooks.tenantFor(""); for (const s of listShops()) if (phoneShopOk(s.code)) await voiceHooks.tenantFor(s.code); })().catch((e) => console.error("phone shop preload failed:", e.message));
 
 function pricedView(cart) { const p = priceCart(cart); return { lines: p.lines, total: p.total }; }
 

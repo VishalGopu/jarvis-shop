@@ -7,7 +7,7 @@ import { stt, tts, sarvamEnabled } from "./sarvam.js";
 import { Endpointer, pcm8kToWav16k, wavTo8kPcm, parsePickup, fmtClock, PHONE_RATE } from "./telephony.js";
 import { runIn } from "./tenant.js";
 import { allowed, track } from "./usage.js";
-import { menu, priceCart, createOrder, isOut, persist } from "./orders.js";
+import { menu, priceCart, createOrder, isOut, persist, holdForPickup } from "./orders.js";
 import { parse, applyToCart } from "./parser.js";
 import { say } from "./phrases.js";
 import { lineText, unitPrice } from "../public/units.js";
@@ -82,7 +82,7 @@ async function handleCall(ws, url, hooks) {
         let order;
         try { order = createOrder(call.cart, call.lang); }
         catch (e) { log("cannot create order:", e.message); call.phase = "order"; await speak(P().unknown); return; }
-        Object.assign(order, { source: "phone", pickupAt: at, caller: call.from || null }); persist();
+        Object.assign(order, { source: "phone", pickupAt: at, caller: call.from || null }); holdForPickup(order, at); persist();
         hooks.onOrder?.(tenant, order);
         log(`order #${order.number} booked for ${fmtClock(at)} (₹${order.total})`);
         const d = await speak(P().phoneDone(order.number, fmtClock(at), order.total));
@@ -206,7 +206,7 @@ export async function handlePhoneTool(req, res, hooks) {
         if (at == null) return send(200, { ok: false, needs: "pickup_time", message: `I could not use that pickup time. It is ${fmtClock(Date.now())} now, and pickup must be within the next 6 hours, not in the past. Nothing is booked yet. Tell the caller this is not a system problem, then ask for a time from now, for example in twenty minutes or at six thirty.` });
         let order; try { order = createOrder(priced.lines.map((l) => ({ id: l.id, qty: l.qty, note: l.note })), "en-IN"); }
         catch (e) { return send(200, { ok: false, message: `Could not book: ${e.message}. Ask the caller what to change.` }); }
-        Object.assign(order, { source: "phone", pickupAt: at, caller: input.caller ? String(input.caller).slice(0, 20) : null }); persist();
+        Object.assign(order, { source: "phone", pickupAt: at, caller: input.caller ? String(input.caller).slice(0, 20) : null }); holdForPickup(order, at); persist();
         if (input.call_id) { booked.set(String(input.call_id), { number: order.number, at: Date.now() }); if (booked.size > 500) booked.delete(booked.keys().next().value); }
         hooks.onOrder?.(tenant, order);
         log(`order #${order.number} booked by tool for ${fmtClock(at)} (₹${order.total})`);

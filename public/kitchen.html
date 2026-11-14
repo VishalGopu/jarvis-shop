@@ -32,6 +32,7 @@ button.ghost{background:#26314d;color:var(--fg)}button.rec{background:var(--bad)
   <div class="strip" id="chefStrip"></div>
   <div class="chips" id="chips"></div>
   <p><button id="talk">🎤 Hold & say “order 104 ready” / “dosa ready”</button> <span id="heard" class="mut"></span></p>
+  <div id="upcoming"></div>
   <div class="grid" id="list"></div>
 </div>
 
@@ -41,7 +42,7 @@ import { fmtQty, lineText } from "/units.js";
 setServer(false);
 const $ = (id) => document.getElementById(id);
 const ls = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
-let who = ls.get("kwho"), orders = [], chefs = [], mode = "station", menu = [], fulfil = "kitchen", W = {}, payAfter = false;
+let who = ls.get("kwho"), upcoming = [], orders = [], chefs = [], mode = "station", menu = [], fulfil = "kitchen", W = {}, payAfter = false;
 const staff = () => W.staff || "Chef", pack = () => fulfil === "pack";
 const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 const fmt = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
@@ -49,7 +50,7 @@ const note = (t) => ($("note").textContent = t);
 const chefName = (id) => chefs.find((c) => c.id === id)?.name;
 
 async function load() {
-  try { const k = await get("/api/kitchen"); orders = k.orders; chefs = k.chefs; mode = k.mode; fulfil = k.fulfil || "kitchen"; W = k.words || {}; const cfg = await get("/api/config"); menu = cfg.menu.items; payAfter = cfg.profile?.payWhen === "after"; }
+  try { const k = await get("/api/kitchen"); orders = k.orders; upcoming = k.upcoming || []; chefs = k.chefs; mode = k.mode; fulfil = k.fulfil || "kitchen"; W = k.words || {}; const cfg = await get("/api/config"); menu = cfg.menu.items; payAfter = cfg.profile?.payWhen === "after"; }
   catch { note("Can't reach server — tap ⚙ server"); return; }
   render();
 }
@@ -110,6 +111,7 @@ function renderBoard() {
   $("chefStrip").innerHTML = chefs.map((c) => `<div class="cf"><b>${c.name}</b> <span class="${c.online ? "on" : "off"}">${c.online ? "● on shift" : "○ off"}</span><br>${c.task ? `${c.task.items.map((i) => lineText(i)).join(", ")} → #${c.task.number} <button class="ghost sm" data-free="${c.id}">free</button>` : `<span class="mut">idle</span>`}${(c.queued || []).length ? `<br><span class="mut">next: ${c.queued.map((q) => "#" + q.number).join(", ")}</span>` : ""}</div>`).join("") || `<div class="mut">Nobody configured (Owner → ${W.setup || "Kitchen setup"}).</div>`;
   $("chips").innerHTML = menu.map((i) => `<span class="chip ${i.soldOut ? "offc" : ""}" data-so="${i.id}" data-v="${i.soldOut ? 0 : 1}">${i.name}${i.soldOut ? " · out" : ""}</span>`).join("");
   $("title").textContent = "📋 " + (W.station || "Kitchen") + " board";
+  $("upcoming").innerHTML = upcoming.length ? `<div class="o" style="margin-bottom:12px"><b>📞 Upcoming phone orders</b> <span class="mut">starts ${upcoming[0].startAt ? "at " + clock(upcoming[0].startAt) : "later"}, reminder spoken then</span>${upcoming.map((o) => `<div class="ln"><span><b>#${o.number}</b> due ${clock(o.pickupAt)} · ${o.lines.map((l) => `${fmtQty(l.qty, l.unit)} × ${l.name}${l.note ? " 📝" + l.note : ""}`).join(", ")}</span><span class="mut">starts ${clock(o.startAt)}</span></div>`).join("")}</div>` : "";
   const first = orders.find((o) => o.status === "cooking");
   $("list").innerHTML = orders.map((o) => `<div class="o ${o.status} ${o === first ? "first" : ""}">${o.source === "phone" && o.pickupAt ? `<span class="t ${o.status === "cooking" && Date.now() > o.pickupAt ? "late" : ""}">due ${clock(o.pickupAt)}</span>` : `<span class="t ${o.status === "cooking" && Date.now() - (o.startedAt || o.paidAt) > 600000 ? "late" : ""}" data-since="${o.startedAt || o.paidAt}">${fmt(Date.now() - (o.startedAt || o.paidAt))}</span>`}<b>#${o.number}</b>${o.source === "phone" ? ` <span class="tag">📞 phone · pay at pickup</span>` : ""}${o.table ? ` <span class="tag">table ${o.table}</span>` : ""}
     ${o.lines.map((l) => { const done = (l.done || 0) >= l.qty; return `<div class="ln ${done ? "done" : ""}"><span>${fmtQty(l.done || 0, l.unit)}/${fmtQty(l.qty, l.unit)} × ${l.name}${l.note ? ` <b title="note">📝${l.note}</b>` : ""}${l.chefId ? `<span class="tag">${chefName(l.chefId) || ""}</span>` : ""}</span>${o.status === "cooking" && !done ? `<button class="ghost" data-line="${o.number}|${l.id}">✓</button>` : ""}</div>`; }).join("")}
@@ -147,6 +149,7 @@ setInterval(() => document.querySelectorAll("[data-since]").forEach((e) => (e.te
 events((e) => {
   if (e.type === "task" && e.chefId === who) { beep(); speakText(e.text, e.lang); }         // spoken ONLY on that chef's device
   if (e.type === "order" && who === "board") beep();
+  if (e.type === "upcoming" || e.type === "reminder") { beep(); speakText(e.text, e.lang); }   // phone order booked for later / time to start it: every kitchen device
   load();
 });
 load(); setInterval(load, 15000);
