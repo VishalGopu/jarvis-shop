@@ -14,7 +14,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 2
-        versionName = "2.0.0"
+        versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // The shop server baked into the APK, so users never type it. Override per build: ./gradlew assembleDebug -PserverUrl=https://other.example
         val serverUrl = providers.gradleProperty("serverUrl").getOrElse("https://shop.golla.in")
