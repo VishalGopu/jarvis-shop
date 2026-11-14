@@ -18,3 +18,6 @@ fun fmtQty(q: Double, unit: String): String {
 
 fun unitLabel(unit: String) = when (unit) { "plate", "piece", "cup", "glass" -> ""; else -> "/$unit" }
 fun minutesSince(ms: Long): Int = if (ms <= 0) 0 else ((System.currentTimeMillis() - ms) / 60000).toInt().coerceAtLeast(0)
+
+/** 2:30 PM style label for a pickup/start time. */
+fun clockTime(ms: Long): String = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault()).format(java.util.Date(ms))

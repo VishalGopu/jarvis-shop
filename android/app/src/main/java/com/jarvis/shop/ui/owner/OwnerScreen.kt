@@ -377,6 +377,24 @@ private fun ShopTab(vm: OwnerViewModel, s: OwnerState, cfg: Config, serverUrl: S
         } else if (info != null) {
             BannerMessage("This server runs a single shop, so there's no shop code.", Tone.Info)
         }
+        info?.phone?.let { ph ->
+            JarvisCard(Modifier.fillMaxWidth()) {
+                Text("📞 Phone orders", style = MaterialTheme.typography.titleMedium)
+                Text("Callers who reach this number are answered by an AI assistant that takes their order for pickup. Orders show on the counter and kitchen marked 📞, pay at pickup.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(Spacing.s))
+                Text("Assistant number", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(ph.number, style = MaterialTheme.typography.headlineSmall)
+                Spacer(Modifier.height(Spacing.s))
+                Text("Send your unanswered calls to it by dialing a code from the shop SIM:", style = MaterialTheme.typography.bodyMedium)
+                listOf("Turn on (no answer)" to ph.on, "Also when busy" to ph.busy, "Turn off forwarding" to ph.off).forEach { (label, code) ->
+                    Spacer(Modifier.height(Spacing.xs))
+                    JarvisButton("$label  $code", {
+                        ctx.startActivity(Intent(Intent.ACTION_DIAL, android.net.Uri.parse("tel:" + android.net.Uri.encode(code))))
+                    }, Modifier.fillMaxWidth(), kind = ButtonKind.Secondary)
+                }
+                Text("Forwarding charges follow your SIM plan.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         Text("Shop type", style = MaterialTheme.typography.titleMedium)
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
             cfg.profile.shops.forEach { t ->

@@ -146,7 +146,7 @@ private fun ReadyStrip(orders: List<Order>, payAfter: Boolean, onClick: (Order) 
         items(orders, key = { it.id }) { o ->
             val needsPay = payAfter && o.paidAt == null
             AssistChip(onClick = { onClick(o) },
-                label = { Text("#${o.number} ready" + if (needsPay) " · collect ₹${o.total}" else "", style = MaterialTheme.typography.labelMedium) },
+                label = { Text("#${o.number}${if (o.isPhone) " 📞" else ""} ready" + if (needsPay) " · collect ₹${o.total}" else "", style = MaterialTheme.typography.labelMedium) },
                 leadingIcon = { Icon(Icons.Filled.CheckCircle, null, tint = if (needsPay) Palette.Warning else Palette.Success) })
         }
     }

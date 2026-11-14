@@ -52,6 +52,10 @@ class KitchenViewModel(private val graph: AppGraph) : ViewModel() {
                         e.text?.let { t -> runCatching { repo.tts(t, e.lang ?: "en-IN").audio }.getOrNull()?.let(graph.speaker::play) }
                         refresh()
                     } else refresh()
+                    "upcoming", "reminder" -> {   // phone order booked for later / time to start it: spoken on every kitchen device
+                        e.text?.let { t -> runCatching { repo.tts(t, e.lang ?: "en-IN").audio }.getOrNull()?.let(graph.speaker::play) }
+                        refresh()
+                    }
                     "update", "order", "menu" -> refresh()
                 }
             }

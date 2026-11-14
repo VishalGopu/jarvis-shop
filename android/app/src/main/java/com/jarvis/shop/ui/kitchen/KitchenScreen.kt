@@ -54,6 +54,7 @@ import com.jarvis.shop.ui.components.LoadingBlock
 import com.jarvis.shop.ui.components.MicButton
 import com.jarvis.shop.ui.components.StatusChip
 import com.jarvis.shop.ui.components.Tone
+import com.jarvis.shop.ui.clockTime
 import com.jarvis.shop.ui.fmtQty
 import com.jarvis.shop.ui.minutesSince
 import com.jarvis.shop.ui.theme.Palette
@@ -83,7 +84,7 @@ fun KitchenScreen(graph: AppGraph, cfg: Config) {
                 val me = k.chefs.firstOrNull { it.id == s.me }
                 if (k.chefs.isNotEmpty() && me == null && s.me != ALL_ORDERS) ChefPicker(k.chefs, words.staff, vm)
                 else Column(Modifier.fillMaxSize()) {
-                    Box(Modifier.weight(1f)) { WorkList(me, k.orders.filter { it.status == "cooking" }, words.working, words.station, vm) }
+                    Box(Modifier.weight(1f)) { WorkList(me, k.orders.filter { it.status == "cooking" }, k.upcoming, words.working, words.station, vm) }
                     if (me != null && me.online) {
                         Row(Modifier.fillMaxWidth().padding(Spacing.l), verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.width(88.dp), contentAlignment = Alignment.Center) { MicButton(s.mic, { vm.micTapped(hasMic()) { askMic.launch(Manifest.permission.RECORD_AUDIO) } }, size = 56.dp) }
@@ -121,7 +122,7 @@ private fun ChefPicker(chefs: List<Chef>, staff: String, vm: KitchenViewModel) {
 }
 
 @Composable
-private fun WorkList(me: Chef?, cooking: List<Order>, working: String, station: String, vm: KitchenViewModel) {
+private fun WorkList(me: Chef?, cooking: List<Order>, upcoming: List<Order>, working: String, station: String, vm: KitchenViewModel) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(Spacing.l), verticalArrangement = Arrangement.spacedBy(Spacing.m)) {
         if (me != null) {
             item {
@@ -147,6 +148,19 @@ private fun WorkList(me: Chef?, cooking: List<Order>, working: String, station: 
             }
             item { Row { JarvisButton("Not me", { vm.chooseMe(null) }, kind = ButtonKind.Tertiary); Spacer(Modifier.width(Spacing.s)); if (me.task != null) JarvisButton("Pass on", vm::transfer, kind = ButtonKind.Tertiary) } }
         }
+        if (upcoming.isNotEmpty()) {
+            item { Text("📞 Upcoming phone orders", style = MaterialTheme.typography.titleMedium) }
+            items(upcoming, key = { "up_" + it.id }) { o ->
+                JarvisCard(Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("#${o.number}", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                        StatusChip("Due ${o.pickupAt?.let(::clockTime) ?: "later"}", Tone.Info)
+                    }
+                    Text(o.lines.joinToString { "${fmtQty(it.qty, it.unit)} ${it.name}" }, style = MaterialTheme.typography.bodyLarge)
+                    o.startAt?.let { Text("Starts at ${clockTime(it)}; you'll be reminded.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
+            }
+        }
         item { Text("All orders in progress", style = MaterialTheme.typography.titleMedium) }
         if (cooking.isEmpty()) item { Text("Nothing is being $working right now.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         items(cooking, key = { it.id }) { o ->
@@ -154,6 +168,7 @@ private fun WorkList(me: Chef?, cooking: List<Order>, working: String, station: 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("#${o.number}", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                     o.table?.takeIf { it.isNotBlank() }?.let { StatusChip("Table $it", Tone.Neutral); Spacer(Modifier.width(Spacing.s)) }
+                    if (o.isPhone) { StatusChip("📞 Due ${o.pickupAt?.let(::clockTime) ?: "soon"}", Tone.Info); Spacer(Modifier.width(Spacing.s)) }
                     JarvisButton("Ready", { vm.orderReady(o.number) }, Modifier.height(48.dp), kind = ButtonKind.Success)
                 }
                 Spacer(Modifier.height(Spacing.s))
