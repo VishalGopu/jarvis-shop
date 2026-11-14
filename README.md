@@ -84,6 +84,21 @@ Counter, Kitchen and Owner are all in one app: the small swap icon in the top-ri
 (Owner asks for the PIN). Counter and Kitchen join silently with the shop code.
 Use the laptop's current Wi-Fi address, or Tailscale so it never changes.
 
+### Phone orders (prototype)
+The owner forwards unanswered calls from their own number to a telephony number (Exotel ExoPhone). A Voicebot applet in that
+number's call flow streams each call to `ws://<host>:<VOICE_PORT>/voice?shop=<shop code>&key=<VOICE_KEY>`; the shop code in the URL is how
+we know which shop was called, so the caller never has to say it. The agent greets (as an AI), takes the order with the same parser
+and prices as the counter, asks when the caller will collect, and books it as a pay-at-pickup order (`source: "phone"`, pickup time,
+masked caller number). Only pay-after shops (restaurant, kirana) for now.
+```bash
+# .env: VOICE_KEY=<random>  VOICE_PORT=3001  TZ=Asia/Kolkata   (calls are refused without VOICE_KEY)
+npm run start:multi
+# no telephony account needed to try it: a fake Exotel that speaks to the agent and prints what comes back
+node --env-file=.env scripts/fake-exotel.mjs "ws://localhost:3001/voice?shop=<CODE>&key=<VOICE_KEY>" "two kilo rice" "that is all" "in twenty minutes" --transcribe
+```
+Forwarding codes on the owner's SIM: no answer `**61*<number>**15#`, busy `**67*<number>#`, unreachable `**62*<number>#`; turn off with `##61#`, `##67#`, `##62#`.
+Expose only the voice port to the provider (`ngrok http 3001`, then use the `wss://` URL).
+
 ### Tests
 ```bash
 npm test        # order flow, FIFO/partial readiness, scheduler, voice phrase parsing (uses a temp data dir)

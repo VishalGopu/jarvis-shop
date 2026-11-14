@@ -15,6 +15,7 @@ import { facts, suggestions, briefing, answerRules, renderSuggestion, noHear, LA
 import { ask, llmProvider } from "./src/llm.js";
 import { parse, applyToCart } from "./src/parser.js";
 import { say, replyLang } from "./src/phrases.js";
+import { attachVoice } from "./src/voice.js";
 
 const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css" };
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type, Authorization", "Access-Control-Allow-Methods": "GET,POST,OPTIONS" };
@@ -36,7 +37,7 @@ function dispatch() { const out = schedule(); for (const a of out) emit("task", 
 const menuView = () => ({ shop: menu.shop, items: menu.items.map((i) => ({ ...i, soldOut: isOut(i.id) })) });
 const profileView = () => ({ id: menu.id, kindLabel: menu.kindLabel, fulfil: menu.fulfil, payWhen: menu.payWhen, table: !!menu.table, words: menu.words, shops: Object.values(profiles).map((p) => ({ id: p.id, label: p.label })) });
 const slipText = (o) => say(KITCHEN_LANG).newOrder(o.number, o.lines.map((l) => lineText(l, true)).join(", "));
-const view = (o) => ({ id: o.id, number: o.number, lines: o.lines, total: o.total, status: o.status, paidAt: o.paidAt, startedAt: o.startedAt, lang: o.lang, table: o.table, method: o.method });
+const view = (o) => ({ id: o.id, number: o.number, lines: o.lines, total: o.total, status: o.status, paidAt: o.paidAt, startedAt: o.startedAt, lang: o.lang, table: o.table, method: o.method, source: o.source, pickupAt: o.pickupAt, caller: o.caller ? "XXXXXX" + String(o.caller).slice(-4) : undefined });
 
 async function app(req, res, url, role) {
   try {
@@ -256,7 +257,21 @@ async function gateway(req, res) {
     console.error(e); if (!res.headersSent) json(res, 500, { error: e.message });
   }
 }
-http.createServer(gateway).listen(process.env.PORT || 3000, "0.0.0.0", () => console.log(`Jarvis for Shops on :${process.env.PORT || 3000}  mode=${isMulti() ? "multi-shop" : "single-shop"}  sarvam=${sarvamEnabled()}  parser=${process.env.PARSER || (process.env.LLAMA_URL ? "llama" : process.env.OLLAMA_URL ? "ollama" : "rules")}`));
+const server = http.createServer(gateway);
+server.listen(process.env.PORT || 3000, "0.0.0.0", () => console.log(`Jarvis for Shops on :${process.env.PORT || 3000}  mode=${isMulti() ? "multi-shop" : "single-shop"}  sarvam=${sarvamEnabled()}  parser=${process.env.PARSER || (process.env.LLAMA_URL ? "llama" : process.env.OLLAMA_URL ? "ollama" : "rules")}`));
+// Phone orders: a telephony provider streams each call to /voice?shop=<code>&key=<VOICE_KEY> (see src/voice.js)
+// VOICE_PORT puts the call endpoint on its own port, so a public tunnel can expose just that and not the whole shop API
+const voiceServer = process.env.VOICE_PORT ? http.createServer((q, r) => { r.writeHead(404); r.end(); }).listen(process.env.VOICE_PORT, "0.0.0.0") : server;
+attachVoice(voiceServer, {
+  tenantFor: async (code) => {
+    let t;
+    if (isMulti()) { const shop = shopByCode(code); if (!shop) return null; t = loadTenant(shop.id, { name: shop.name, profile: shop.profile, plan: shop.plan }); }
+    else t = loadTenant("default");
+    if (!t.hooks.ready) wire(t);
+    return t;
+  },
+  onOrder: (t, o) => runIn(t, () => { dispatch(); emit("order", { order: view(o), text: slipText(o) }); }),
+});
 
 // idle shops are flushed and unloaded so memory follows ACTIVE shops, not registered ones
 if (isMulti()) setInterval(() => { const idle = +process.env.TENANT_IDLE_MS || 15 * 60e3; for (const [id, t] of tenants) if (Date.now() - t.lastUsed > idle && t.clients.size === 0) unloadTenant(id); }, 60e3).unref();
