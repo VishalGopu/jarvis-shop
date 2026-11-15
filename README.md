@@ -9,7 +9,7 @@ Built for the Paytm AI track (*an AI business partner for every merchant*) on **
 
 ---
 
-## The problem
+## The problem is
 A small shop is run by one overloaded owner with paper slips, memory and WhatsApp.
 Orders are slow and wrong in the rush, payments are not tied to orders, calls go unanswered while hands are full,
 nobody tells the owner what is selling, and the software that exists is English-only and built for chains.
