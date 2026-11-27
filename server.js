@@ -25,7 +25,7 @@ const json = (res, code, obj) => { res.writeHead(code, { "Content-Type": "applic
 const body = (req) => new Promise((ok, no) => { const c = []; let n = 0; req.on("data", (d) => { n += d.length; if (n > 8e6) { no(new Error("request too large")); req.destroy(); } else c.push(d); }); req.on("end", () => ok(Buffer.concat(c))); req.on("error", no); });
 const speak = async (text, lang) => { if (!sarvamEnabled() || !allowed("tts")) return null; try { const a = await tts(text, replyLang(lang)); track("tts", text.length); return a; } catch (e) { console.warn(e.message); return null; } };
 // speech-to-text with the shop's daily quota and usage metering
-const listen = async (b64) => { const buf = Buffer.from(b64, "base64"); const seconds = wavDuration(buf); if (!seconds) { const e = new Error("Recording was too short or invalid. Hold the microphone button a little longer and try again."); e.invalidAudio = true; throw e; } if (!allowed("stt")) { const e = new Error("daily voice limit reached - please type or tap instead"); e.limited = true; throw e; } track("stt"); track("sttSec", Math.round(seconds)); return stt(buf); };
+const listen = async (b64) => { if (!sarvamEnabled()) { const e = new Error("Voice key not set (SARVAM_API_KEY). Use typing or the tap buttons instead."); e.noKey = true; throw e; } const buf = Buffer.from(b64, "base64"); const seconds = wavDuration(buf); if (!seconds) { const e = new Error("Recording was too short or invalid. Hold the microphone button a little longer and try again."); e.invalidAudio = true; throw e; } if (!allowed("stt")) { const e = new Error("daily voice limit reached - please type or tap instead"); e.limited = true; throw e; } track("stt"); track("sttSec", Math.round(seconds)); return stt(buf); };
 const KITCHEN_LANG = process.env.KITCHEN_LANG || "en-IN";
 // live updates (SSE) are scoped to ONE shop: each shop state owns its own set of connected devices
 const emitTo = (t, type, data = {}) => { const m = `data: ${JSON.stringify({ type, ...data })}\n\n`; for (const c of t.clients) c.write(m); };
@@ -49,7 +49,7 @@ async function app(req, res, url, role) {
     if (req.method === "POST" && url.pathname === "/api/turn") {
       const { text: typed, audio, cart = [], lang: hint, add: payload_add } = JSON.parse((await body(req)).toString());
       const t = {}; let text = typed || "", lang = hint || "en-IN";
-      if (audio) { const s = Date.now(); let r; try { r = await listen(audio); } catch (e) { if (!e.limited && !e.invalidAudio) throw e; return json(res, 200, { heard: "", reply: e.invalidAudio ? say(lang).noAudio : e.message, lang, cart, ...pricedView(cart), audio: null, action: "none", limited: !!e.limited, timings: t }); } text = r.text; lang = r.lang || lang; t.stt = Date.now() - s; }
+      if (audio) { const s = Date.now(); let r; try { r = await listen(audio); } catch (e) { if (!e.limited && !e.invalidAudio && !e.noKey) throw e; return json(res, 200, { heard: "", reply: e.invalidAudio ? say(lang).noAudio : e.message, lang, cart, ...pricedView(cart), audio: null, action: "none", limited: !!e.limited, timings: t }); } text = r.text; lang = r.lang || lang; t.stt = Date.now() - s; }
       const P = say(lang);
       const reply = async (msg, extra = {}) => { const s = Date.now(); const a = await speak(msg, lang); t.tts = Date.now() - s; return json(res, 200, { heard: text, reply: msg, lang, cart, ...pricedView(cart), audio: a, timings: t, ...extra }); };
       if (!text && !payload_add) return reply(P.unknown);
@@ -204,6 +204,7 @@ async function app(req, res, url, role) {
   } catch (e) {
     if (e.invalidAudio) return json(res, 400, { error: e.message });
     if (e.limited) return json(res, 429, { error: e.message });
+    if (e.noKey) return json(res, 503, { error: e.message });
     if (e instanceof SyntaxError) return json(res, 400, { error: "bad request" });
     console.error(e); json(res, 500, { error: e.message });
   }

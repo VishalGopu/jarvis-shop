@@ -12,7 +12,7 @@ async function book(body) {
 // a counter order is pay-first: it waits for payment and is not "pay later"
 const walkin = O.createOrder([{ id: "idli", qty: 1 }]); assert.equal(walkin.status, "awaiting_payment"); assert.ok(!walkin.payLater);
 // a phone order goes straight to the kitchen and is paid at the counter when collected
-const r = await book({ shop: "X", order_text: "two idli", pickup_in_minutes: 20, caller: "09059158791", call_id: "q1" });
+const r = await book({ shop: "X", order_text: "two idli", pickup_in_minutes: 20, caller: "09876543210", call_id: "q1" });
 assert.ok(r.ok, JSON.stringify(r)); assert.match(r.message, /pays at the counter/); const o = O.orders.find((x) => x.number === r.order_number);
 assert.equal(o.status, "cooking"); assert.equal(o.payLater, true); assert.equal(o.paidAt, null); assert.equal(hooks.notified, 1, "kitchen told at booking");
 // far-ahead phone order is held, then starts

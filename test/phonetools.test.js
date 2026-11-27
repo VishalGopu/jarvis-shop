@@ -38,4 +38,12 @@ assert.ok(Math.abs(l.startAt - (l.pickupAt - 30 * 60e3)) < 1000, "starts 30 min 
 assert.equal(startDue(Date.now() + 60 * 60e3).length, 0, "not yet, 60 min on is still too early"); assert.equal(l.status, "scheduled");
 assert.deepEqual(startDue(Date.now() + 91 * 60e3).map((x) => x.number), [l.number], "due once 90 min have passed");
 assert.equal(l.status, "cooking"); assert.ok(l.startedAt); assert.equal(startDue(Date.now() + 200 * 60e3).length, 0, "starts only once");
+// unreadable / impossible pickup times: the agent is told which, and that it is not a system problem
+const before2 = orders.length;
+const unclear = await call("POST", "/phone/book", { shop: "X", order_text: "one kilo sugar", pickup_text: "forty days", call_id: "u1" });
+assert.equal(unclear.out.ok, false); assert.equal(unclear.out.reason, "unclear"); assert.match(unclear.out.message, /could not understand/); assert.match(unclear.out.message, /not a system problem/);
+const far = await call("POST", "/phone/book", { shop: "X", order_text: "one kilo sugar", pickup_text: "tomorrow evening", call_id: "u2" });
+assert.equal(far.out.reason, "far"); assert.match(far.out.message, /more than 6 hours/);
+const oclock = await call("POST", "/phone/book", { shop: "X", order_text: "one kilo sugar", pickup_text: "in thirty five minutes", call_id: "u3" });
+assert.ok(oclock.out.ok); assert.equal(orders.length, before2 + 1, "only the readable time booked");
 console.log("phone tools ok");

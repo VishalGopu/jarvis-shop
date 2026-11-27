@@ -4,7 +4,7 @@
 import { WebSocketServer } from "ws";
 import { timingSafeEqual } from "node:crypto";
 import { stt, tts, sarvamEnabled } from "./sarvam.js";
-import { Endpointer, pcm8kToWav16k, wavTo8kPcm, parsePickup, fmtClock, PHONE_RATE } from "./telephony.js";
+import { Endpointer, pcm8kToWav16k, wavTo8kPcm, parsePickup, parsePickupDetailed, fmtClock, PHONE_RATE } from "./telephony.js";
 import { runIn } from "./tenant.js";
 import { allowed, track } from "./usage.js";
 import { menu, priceCart, createOrder, isOut, persist, holdForPickup, cancelOrder, startWork } from "./orders.js";
@@ -207,9 +207,16 @@ export async function handlePhoneTool(req, res, hooks) {
         if (!priced.lines.length) return send(200, { ok: false, message: (soldOut.length ? `Sorry.${sold}` : "I could not match that to anything on the menu.") + " Ask the caller to say it again, or read out the menu." });
         if (route === "/phone/check") return send(200, { ok: true, lines: priced.lines.map((l) => ({ name: l.name, qty: l.qty, unit: l.unit, amount: l.amount })), total: priced.total, message: summary(priced) + sold + (missed(text, priced) ? " Part of what the caller said was not found on the menu, so tell them which item could not be added." : "") });
 
-        let at = null; const mins = Number(input.pickup_in_minutes);
-        if (mins > 0 && mins <= 360) at = Date.now() + mins * 60e3; else if (input.pickup_text) at = parsePickup(String(input.pickup_text));
-        if (at == null) return send(200, { ok: false, needs: "pickup_time", message: `I could not use that pickup time. It is ${fmtClock(Date.now())} now, and pickup must be within the next 6 hours, not in the past. Nothing is booked yet. Tell the caller this is not a system problem, then ask for a time from now, for example in twenty minutes or at six thirty.` });
+        let at = null, why = "none"; const mins = Number(input.pickup_in_minutes);
+        if (mins > 0 && mins <= 360) at = Date.now() + mins * 60e3; else if (input.pickup_text) ({ at, why } = parsePickupDetailed(String(input.pickup_text)));
+        if (at == null) {
+          const nowTxt = fmtClock(Date.now()), ask = "Tell the caller this is not a system problem and ask for it as minutes from now, for example in twenty minutes, or as a clock time with morning or evening, for example six thirty in the evening. Nothing is booked yet.";
+          const message = why === "passed" ? `That time has already passed: it is ${nowTxt} now. ${ask}`
+            : why === "far" ? `That is more than 6 hours away. Pickup must be within the next 6 hours; it is ${nowTxt} now. ${ask}`
+            : why === "unclear" ? `I could not understand that pickup time. It is ${nowTxt} now. ${ask}`
+            : `I need to know when the caller will collect it. ${ask}`;
+          return send(200, { ok: false, needs: "pickup_time", reason: why, message });
+        }
         const payFirst = menu.payWhen === "before" && process.env.PHONE_PAY === "link"; let mobile = null;   // parked: PHONE_PAY=link texts a pay link instead of paying at pickup
         if (payFirst) { mobile = toMobile(input.pay_phone) || toMobile(input.caller);
           if (!mobile) return send(200, { ok: false, needs: "phone_number", message: "I could not get a valid mobile number to send the payment link to. Ask the caller to say their 10 digit mobile number, then try again. Nothing is booked yet." }); }
