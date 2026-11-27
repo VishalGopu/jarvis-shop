@@ -49,7 +49,8 @@ Each response has `ok` and a plain-English `message` the agent can read out. `bo
 - `PHONE_AGENT_NUMBER=<number owners forward to>` makes the Owner screen show a "Phone orders" card with the number and the dial codes
   (on `**61*N**15#`, busy `**67*N#`, off `##61#`). The card only appears for shops allowed by `VOICE_SHOPS`.
 - Phone orders show on the Kitchen screen with a 📞 tag and a "due <time>" label (instead of the overdue timer), and with 📞 on the Counter's collect-payment list.
-- Known gap: a phone order starts as `cooking` the moment it is booked, so kitchen tasks are dispatched immediately, not shortly before the pickup time.
+- A phone order booked more than `PHONE_LEAD_MIN` minutes (default 30) before pickup waits as `scheduled` and moves to the kitchen, with a spoken
+  reminder, when that lead time begins. A closer pickup starts `cooking` as soon as it is booked.
 
 ## Parked: pay-first phone orders by SMS link (`PHONE_PAY=link`, needs SMS provider + DLT; off by default)
 - `/phone/book` reserves the order as `awaiting_payment`, texts a pay link to the caller (`caller` / `pay_phone`, validated as an Indian mobile) and tells the agent

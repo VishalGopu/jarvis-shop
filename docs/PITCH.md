@@ -73,7 +73,7 @@ Switching shop type, editing prices and tracking stock takes a few taps. Any oth
 **Platform**
 - **Node.js backend**, one shared multi-shop service: each shop's menu, stock, orders and live screens are isolated; access by shop code plus signed role tokens; per-shop usage limits.
 - **Live updates** to every phone in a shop (server-sent events).
-- **Android app** (one APK for every role: counter, kitchen/picker, owner) built with Capacitor.
+- **Android app** (one APK for every role: counter, kitchen/picker, owner) built natively in Kotlin with Jetpack Compose.
 - **Profiles** describe a shop type: catalog with units and stock, how work is fulfilled, when payment happens, and vocabulary.
 - **Safety net:** if the model or network is unavailable, rule-based parsing and answers keep the shop running.
 
