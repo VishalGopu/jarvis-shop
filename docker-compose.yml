@@ -1,0 +1,21 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    # Optional: the app starts without it. Add keys to .env to turn on voice (see .env.example).
+    env_file:
+      - path: .env
+        required: false
+    # Fixed inside the container, whatever .env says.
+    environment:
+      PORT: "3000"
+      DATA_DIR: /app/data
+    # Phone orders with VOICE_PORT=3001 also need that port published: add "3001:3001" under ports.
+    volumes:
+      - shopdata:/app/data
+    init: true
+    restart: unless-stopped
+
+volumes:
+  shopdata:

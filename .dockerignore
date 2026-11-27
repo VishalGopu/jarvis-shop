@@ -1,0 +1,10 @@
+.git
+.claude
+.env
+*.env
+node_modules
+data
+demo-data
+demo-kirana
+android
+voice-lab

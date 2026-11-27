@@ -99,7 +99,7 @@ const queuedHtml = (me) => (me.queued || []).length ? `<div class="idle" style="
 const taskText = (me) => me.task ? (mode === "order" ? `Order ${me.task.number}: ` : "") + me.task.items.map((i) => lineText(i, true)).join(", ") + (mode === "order" ? "" : ` for order ${me.task.number}`) : "";
 async function complete(body) {
   try { const r = await post(`/api/chefs/${who}/complete`, body);
-    note(r.completed ? (r.orderReady ? `Order #${r.order.number} complete — announced at the counter.` : "Done. Next task coming…") : (r.heard ? `Heard “${r.heard}” — say “done” to finish.` : "Nothing to complete."));
+    note(r.error ? r.error : r.completed ?(r.orderReady ? `Order #${r.order.number} complete — announced at the counter.` : "Done. Next task coming…") : (r.heard ? `Heard “${r.heard}” — say “done” to finish.` : "Nothing to complete."));
   } catch (e) { note("Failed: " + e.message); } load();
 }
 $("startShift").onclick = async () => { beep(); await post(`/api/chefs/${who}/online`, { online: true }); load(); };
@@ -120,6 +120,7 @@ function renderBoard() {
 }
 async function send(body) {
   try { const r = await post("/api/ready", body);
+    if (r.error) { $("heard").textContent = r.error; return load(); }
     if (!r.results?.length) { $("heard").textContent = `Nothing to mark${r.heard ? ` for “${r.heard}”` : ""}. Say “order 104 ready”, “dosa ready” or “2 dosa ready”.`; return load(); }
     const done = r.results.filter((x) => x.completed).map((x) => "#" + x.number), part = r.results.filter((x) => !x.completed).map((x) => "#" + x.number);
     $("heard").textContent = (r.heard ? `Heard “${r.heard}” → ` : "") + [done.length ? `ready: ${done.join(", ")}` : "", part.length ? `partly done: ${part.join(", ")}` : ""].filter(Boolean).join(" · ");

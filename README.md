@@ -9,7 +9,7 @@ Built for the Paytm AI track (*an AI business partner for every merchant*) on **
 
 ---
 
-## The problem is
+## The problem
 A small shop is run by one overloaded owner with paper slips, memory and WhatsApp.
 Orders are slow and wrong in the rush, payments are not tied to orders, calls go unanswered while hands are full,
 nobody tells the owner what is selling, and the software that exists is English-only and built for chains.
@@ -48,6 +48,13 @@ Exposed to the internet through a Cloudflare tunnel: one hostname for the app, o
 3. The small **swap icon** in the top-right corner switches between Counter, Kitchen and Owner.
 
 The APK is a debug-signed demo build. To point it at your own server: `./gradlew assembleDebug -PserverUrl=https://your.host`.
+
+## Run with Docker
+```bash
+docker compose up --build   # http://localhost:3000
+```
+It starts without a `.env` file or any keys; voice input then answers "Voice key not set". To turn on voice and the other
+features, copy `.env.example` to `.env`, fill it in and start again.
 
 ## Run your own server
 ```bash
